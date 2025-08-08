@@ -1,12 +1,13 @@
-// file: src/app/api/audio/[videoId]/route.ts
+// src/app/api/audio/[videoId]/route.ts
 import { NextResponse } from 'next/server';
-import ytdl from 'ytdl-core';
+import ytdl from '@distube/ytdl-core';
 
 export async function GET(
   request: Request,
   { params }: { params: { videoId: string } }
 ) {
-  const { videoId } = params;
+  // The 'await' is necessary for the new Next.js App Router
+  const { videoId } = await params;
   const url = `https://www.youtube.com/watch?v=${videoId}`;
 
   if (!ytdl.validateID(videoId)) {
@@ -14,21 +15,21 @@ export async function GET(
   }
 
   try {
-    const audioStream = ytdl(url, {
+    const stream = ytdl(url, {
       filter: 'audioonly',
       quality: 'highestaudio',
     });
 
-    // Create a new ReadableStream from the Node.js stream
     const readableStream = new ReadableStream({
       start(controller) {
-        audioStream.on('data', (chunk) => {
+        stream.on('data', (chunk) => {
           controller.enqueue(chunk);
         });
-        audioStream.on('end', () => {
+        stream.on('end', () => {
           controller.close();
         });
-        audioStream.on('error', (err) => {
+        stream.on('error', (err) => {
+          console.error('ytdl stream error:', err);
           controller.error(err);
         });
       },
@@ -36,13 +37,13 @@ export async function GET(
 
     return new Response(readableStream, {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/webm', // Using a more common audio format
         'Cache-Control': 'no-store',
       },
     });
 
   } catch (error: any) {
-    console.error('ytdl-core Error:', error.message);
+    console.error('Failed to get audio stream:', error);
     return NextResponse.json({ error: 'Failed to get audio stream' }, { status: 500 });
   }
 }
