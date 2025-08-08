@@ -5,27 +5,25 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 
 interface MusicPlayerProps {
-  videoId: string;
+  audioUrl: string; // The URL to play (can be a blob or an API path)
   thumbnailUrl: string;
+  onFinished: () => void;
 }
 
-const MusicPlayer: React.FC<MusicPlayerProps> = ({ videoId, thumbnailUrl }) => {
+const MusicPlayer: React.FC<MusicPlayerProps> = ({ audioUrl, thumbnailUrl, onFinished }) => {
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(0.2);
 
   useEffect(() => {
     if (waveformRef.current) {
-      // Clean up previous instance if it exists
-      wavesurfer.current?.destroy();
-      
       const ws = WaveSurfer.create({
         container: waveformRef.current,
         waveColor: '#4F4A85',
         progressColor: '#383351',
-        url: `/api/audio/${videoId}`, // Load the audio directly
+        url: audioUrl, // It simply loads the URL it's given
         barWidth: 2,
         barRadius: 3,
         height: 100,
@@ -33,41 +31,30 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ videoId, thumbnailUrl }) => {
 
       wavesurfer.current = ws;
 
-      // --- Event-driven state updates ---
+      // Event-driven state updates
       ws.on('ready', () => {
         setIsReady(true);
+        ws.play(); // Autoplay when ready
       });
-      ws.on('play', () => {
-        setIsPlaying(true);
-      });
-      ws.on('pause', () => {
-        setIsPlaying(false);
-      });
-      ws.on('finish', () => {
-        setIsPlaying(false); // Song finished
-      });
-      ws.on('error', (err) => {
-        console.error('WaveSurfer error:', err);
-      });
+      ws.on('play', () => setIsPlaying(true));
+      ws.on('pause', () => setIsPlaying(false));
+      ws.on('finish', onFinished); // Call parent when finished
+      ws.on('error', (err) => console.error('WaveSurfer error:', err));
 
       return () => {
         ws.destroy();
       };
     }
-  }, [videoId]); // Re-run effect only when videoId changes
+  }, [audioUrl, onFinished]); // Re-create the player only if the audioUrl changes
 
   const handlePlayPause = useCallback(() => {
-    if (wavesurfer.current) {
-      wavesurfer.current.playPause();
-    }
+    wavesurfer.current?.playPause();
   }, []);
 
   const onVolumeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    if (wavesurfer.current) {
-      wavesurfer.current.setVolume(newVolume);
-    }
+    wavesurfer.current?.setVolume(newVolume);
   }, []);
 
   return (
@@ -77,8 +64,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({ videoId, thumbnailUrl }) => {
         <div className="ml-4 flex-grow">
           <div ref={waveformRef} />
           <div className="controls mt-2 flex items-center">
-            <button 
-              onClick={handlePlayPause} 
+            <button
+              onClick={handlePlayPause}
               className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-full disabled:bg-gray-500"
               disabled={!isReady}
             >
