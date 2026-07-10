@@ -9,13 +9,14 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
+    "fast-xml-parser": "^5.8.0",
     "googleapis": "^154.1.0",
+    "music-metadata": "^11.12.3",
     "next": "15.5.15",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-player": "^3.3.1",
-    "wavesurfer.js": "^7.10.1"
+    "youtube-dl-exec": "^3.1.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
