@@ -13,6 +13,7 @@ Items are ordered by recommended priority.
 - [ ] If the web product will be deployed, set the exact Vercel origin in Cloud Run CORS, configure Vercel `BACKEND_URL` and the matching session secret, then verify the browser session exchange and range seeking.
 - [ ] Add Google Cloud budget alerts, Cloud Run error/latency alerts, Secret Manager rotation reminders, and an Artifact Registry retention policy.
 - [ ] Resolve Gradle deprecation warnings before upgrading to Gradle 10; keep Java 17+ and Android SDK discovery documented for clean machines.
+- [ ] Reconcile GitHub's post-push Dependabot alerts after its dependency graph refresh. Local `npm audit` reports zero vulnerabilities; review any remaining alerts for Gradle or stale lockfile data individually.
 
 ## Recommended next features
 
