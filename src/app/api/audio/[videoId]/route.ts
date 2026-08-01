@@ -4,6 +4,8 @@ import {
   resolveYouTubeAudio,
   type ResolvedYouTubeAudio,
 } from '@/app/lib/youtubeAudioCache';
+import type { AudioQuality } from '@/app/lib/types';
+import { legacyBackendApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 export const runtime = 'nodejs';
 
@@ -58,9 +60,10 @@ function responseHeaders(
 async function proxyResolvedAudio(
   request: Request,
   videoId: string,
+  quality: AudioQuality,
   forceRefresh = false
 ): Promise<Response> {
-  const { entry, cacheStatus } = await resolveYouTubeAudio(videoId, forceRefresh);
+  const { entry, cacheStatus } = await resolveYouTubeAudio(videoId, quality, forceRefresh);
   const upstream = await fetch(entry.url, {
     method: request.method === 'HEAD' ? 'HEAD' : 'GET',
     headers: upstreamHeaders(entry, request),
@@ -71,8 +74,8 @@ async function proxyResolvedAudio(
 
   if (!forceRefresh && RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
     upstream.body?.cancel().catch(() => undefined);
-    invalidateYouTubeAudio(videoId);
-    return proxyResolvedAudio(request, videoId, true);
+    invalidateYouTubeAudio(videoId, quality);
+    return proxyResolvedAudio(request, videoId, quality, true);
   }
 
   if (!upstream.ok && upstream.status !== 206) {
@@ -89,13 +92,20 @@ async function proxyResolvedAudio(
 }
 
 async function handle(request: Request, context: RouteContext) {
+  if (!legacyBackendApiEnabled()) {
+    return NextResponse.json({ error: 'Use the Cloud Run backend in production' }, { status: 404 });
+  }
   const { videoId } = await context.params;
   if (!VIDEO_ID_PATTERN.test(videoId)) {
     return NextResponse.json({ error: 'Invalid video ID' }, { status: 400 });
   }
 
   try {
-    return await proxyResolvedAudio(request, videoId);
+    const requestedQuality = new URL(request.url).searchParams.get('quality');
+    const quality: AudioQuality = requestedQuality === 'balanced' || requestedQuality === 'dataSaver'
+      ? requestedQuality
+      : 'high';
+    return await proxyResolvedAudio(request, videoId, quality);
   } catch (error) {
     if (request.signal.aborted) {
       return new Response(null, { status: 499 });

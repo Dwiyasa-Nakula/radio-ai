@@ -9,8 +9,12 @@ import {
   walkAudioFiles,
 } from '@/app/lib/localMusic';
 import type { Track } from '@/app/lib/types';
+import { localFilesystemApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 export async function GET(request: Request) {
+  if (!localFilesystemApiEnabled()) {
+    return NextResponse.json({ error: 'Local filesystem APIs are disabled in production' }, { status: 404 });
+  }
   const url = new URL(request.url);
   const queryPath = url.searchParams.get('path');
   const root = queryPath ? path.resolve(queryPath) : getDefaultMusicDir();
@@ -51,6 +55,14 @@ export async function GET(request: Request) {
     let year: number | undefined;
     let duration: number | undefined;
     let genre: string[] | undefined;
+    let normalizationGain: number | undefined;
+    let sourceNotes: string | undefined;
+    let codec = path.extname(absolute).slice(1).toUpperCase();
+    let bitrate: number | undefined;
+    let sampleRate: number | undefined;
+    let bitDepth: number | undefined;
+    let lossless = ['.flac', '.wav'].includes(path.extname(absolute).toLowerCase());
+    const fileStat = await fs.stat(absolute);
 
     try {
       const meta = await parseFile(absolute, { duration: true, skipCovers: true });
@@ -60,6 +72,25 @@ export async function GET(request: Request) {
       if (meta.common.year) year = meta.common.year;
       if (meta.common.genre && meta.common.genre.length > 0) genre = meta.common.genre;
       if (meta.format.duration) duration = meta.format.duration;
+      if (meta.format.codec) codec = meta.format.codec;
+      if (meta.format.bitrate) bitrate = Math.round(meta.format.bitrate / 1000);
+      sampleRate = meta.format.sampleRate;
+      bitDepth = meta.format.bitsPerSample;
+      lossless = meta.format.lossless ?? lossless;
+      const replayGain = meta.common.replaygain_track_gain;
+      if (replayGain && Number.isFinite(replayGain.dB)) {
+        normalizationGain = Math.max(0.5, Math.min(1.5, 10 ** (replayGain.dB / 20)));
+      }
+      const embeddedNotes = [
+        ...(meta.common.description ?? []),
+        meta.common.longDescription,
+        ...(meta.common.comment ?? []).map((comment) => comment.text),
+        meta.common.producer?.length ? `Producer: ${meta.common.producer.join(', ')}` : undefined,
+        meta.common.composer?.length ? `Composer: ${meta.common.composer.join(', ')}` : undefined,
+        meta.common.engineer?.length ? `Engineer: ${meta.common.engineer.join(', ')}` : undefined,
+        meta.common.label?.length ? `Label: ${meta.common.label.join(', ')}` : undefined,
+      ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+      if (embeddedNotes.length) sourceNotes = embeddedNotes.join('\n').slice(0, 1600);
     } catch {
       // bad/corrupt tags shouldn't take down the whole list
     }
@@ -75,6 +106,16 @@ export async function GET(request: Request) {
       year,
       duration,
       genre,
+      normalizationGain,
+      sourceNotes,
+      codec,
+      bitrate,
+      sampleRate,
+      bitDepth,
+      lossless,
+      fileSize: fileStat.size,
+      lastModified: fileStat.mtimeMs,
+      relativePath: path.relative(root, absolute).split(path.sep).join('/'),
     });
   }
 

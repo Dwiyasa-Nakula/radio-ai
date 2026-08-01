@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">mirAI melody 73.9 FM</string>
+    <string name="car_app_name">mirAI melody</string>
+    <string name="library_root">mirAI melody</string>
+    <string name="youtube_playlist">My YouTube playlist</string>
+    <string name="on_device_music">Music on this phone</string>
+    <string name="live_radio">Live radio</string>
+    <string name="japan_radio">Japan</string>
+    <string name="china_radio">China</string>
+    <string name="korea_radio">South Korea</string>
+    <string name="offline_transition">A short transition used when a host segment is unavailable.</string>
+</resources>

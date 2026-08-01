@@ -1,4 +1,10 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import youtubeDl from 'youtube-dl-exec';
+import type { AudioQuality } from './types';
+
+const execFileAsync = promisify(execFile);
+const youtubeDlBinary = (youtubeDl as typeof youtubeDl & { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
 
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 const FALLBACK_TTL_MS = 2 * 60 * 60 * 1000;
@@ -14,6 +20,11 @@ export interface ResolvedYouTubeAudio {
   requestHeaders: Record<string, string>;
   resolvedAt: number;
   expiresAt: number;
+  quality: AudioQuality;
+  codec?: string;
+  bitrate?: number;
+  sampleRate?: number;
+  lossless: false;
 }
 
 interface YoutubeDlPayload {
@@ -25,6 +36,8 @@ interface YoutubeDlPayload {
   filesize_approx?: unknown;
   duration?: unknown;
   http_headers?: unknown;
+  abr?: unknown;
+  asr?: unknown;
 }
 
 interface CacheState {
@@ -92,8 +105,8 @@ function sanitizeHeaders(value: unknown): Record<string, string> {
 
 function pruneCache(): void {
   const now = Date.now();
-  for (const [videoId, entry] of state.entries) {
-    if (entry.expiresAt <= now) state.entries.delete(videoId);
+  for (const [cacheKey, entry] of state.entries) {
+    if (entry.expiresAt <= now) state.entries.delete(cacheKey);
   }
 
   while (state.entries.size > MAX_CACHE_ENTRIES) {
@@ -103,22 +116,44 @@ function pruneCache(): void {
   }
 }
 
-async function resolveFresh(videoId: string): Promise<ResolvedYouTubeAudio> {
+export function youtubeFormatSelector(quality: AudioQuality): string {
+  switch (quality) {
+    case 'high':
+      return 'bestaudio[protocol=https][vcodec=none]/bestaudio[protocol=https]/best[protocol=https]';
+    case 'dataSaver':
+      return 'bestaudio[abr<=96][protocol=https][vcodec=none]/bestaudio[abr<=128][protocol=https][vcodec=none]/bestaudio[protocol=https][vcodec=none]/best[protocol=https]';
+    case 'balanced':
+      return 'bestaudio[ext=m4a][protocol=https][vcodec=none]/bestaudio[protocol=https][vcodec=none]/best[ext=mp4][protocol=https]/best[protocol=https]';
+  }
+}
+
+export function youtubeCacheKey(videoId: string, quality: AudioQuality): string {
+  return `${videoId}:${quality}`;
+}
+
+async function resolveFresh(videoId: string, quality: AudioQuality): Promise<ResolvedYouTubeAudio> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const flags = {
-    dumpSingleJson: true,
-    noPlaylist: true,
-    noWarnings: true,
-    quiet: true,
-    format: 'bestaudio[ext=m4a][protocol=https]/bestaudio[protocol=https]/best[ext=mp4][protocol=https]/best[protocol=https]',
-    extractorArgs: 'youtube:player_client=android',
-  } as Parameters<typeof youtubeDl.exec>[1];
-  const rawPayload = await youtubeDl(
-    watchUrl,
-    flags,
-    { timeout: 30_000 }
+  const { stdout } = await execFileAsync(
+    youtubeDlBinary,
+    [
+      watchUrl,
+      '--dump-single-json',
+      '--no-playlist',
+      '--no-warnings',
+      '--quiet',
+      '--format',
+      youtubeFormatSelector(quality),
+      '--extractor-args',
+      'youtube:player_client=android',
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 30_000,
+      windowsHide: true,
+      maxBuffer: 20 * 1024 * 1024,
+    }
   );
-  const payload = rawPayload as YoutubeDlPayload;
+  const payload = JSON.parse(stdout) as YoutubeDlPayload;
 
   if (typeof payload.url !== 'string' || !payload.url.trim()) {
     throw new Error('yt-dlp returned no direct media URL');
@@ -141,33 +176,41 @@ async function resolveFresh(videoId: string): Promise<ResolvedYouTubeAudio> {
     requestHeaders: sanitizeHeaders(payload.http_headers),
     resolvedAt: now,
     expiresAt: parseExpiry(directUrl, now),
+    quality,
+    codec: typeof payload.acodec === 'string' ? payload.acodec : undefined,
+    bitrate: finitePositive(payload.abr),
+    sampleRate: finitePositive(payload.asr),
+    lossless: false,
   };
 
-  state.entries.delete(videoId);
-  state.entries.set(videoId, entry);
+  const key = youtubeCacheKey(videoId, quality);
+  state.entries.delete(key);
+  state.entries.set(key, entry);
   pruneCache();
   return entry;
 }
 
 export async function resolveYouTubeAudio(
   videoId: string,
+  quality: AudioQuality = 'high',
   forceRefresh = false
 ): Promise<{ entry: ResolvedYouTubeAudio; cacheStatus: 'HIT' | 'MISS' | 'COALESCED' }> {
   if (!VIDEO_ID_PATTERN.test(videoId)) {
     throw new Error('Invalid video ID');
   }
 
-  const cached = state.entries.get(videoId);
+  const key = youtubeCacheKey(videoId, quality);
+  const cached = state.entries.get(key);
   if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
     // Refresh insertion order for simple LRU eviction.
-    state.entries.delete(videoId);
-    state.entries.set(videoId, cached);
+    state.entries.delete(key);
+    state.entries.set(key, cached);
     return { entry: cached, cacheStatus: 'HIT' };
   }
 
-  if (forceRefresh) state.entries.delete(videoId);
+  if (forceRefresh) state.entries.delete(key);
 
-  const active = state.inflight.get(videoId);
+  const active = state.inflight.get(key);
   if (active) {
     return {
       entry: await active,
@@ -175,12 +218,12 @@ export async function resolveYouTubeAudio(
     };
   }
 
-  const promise = resolveFresh(videoId).finally(() => {
-    if (state.inflight.get(videoId) === promise) {
-      state.inflight.delete(videoId);
+  const promise = resolveFresh(videoId, quality).finally(() => {
+    if (state.inflight.get(key) === promise) {
+      state.inflight.delete(key);
     }
   });
-  state.inflight.set(videoId, promise);
+  state.inflight.set(key, promise);
 
   return {
     entry: await promise,
@@ -188,6 +231,12 @@ export async function resolveYouTubeAudio(
   };
 }
 
-export function invalidateYouTubeAudio(videoId: string): void {
-  state.entries.delete(videoId);
+export function invalidateYouTubeAudio(videoId: string, quality?: AudioQuality): void {
+  if (quality) {
+    state.entries.delete(youtubeCacheKey(videoId, quality));
+    return;
+  }
+  for (const key of state.entries.keys()) {
+    if (key.startsWith(`${videoId}:`)) state.entries.delete(key);
+  }
 }

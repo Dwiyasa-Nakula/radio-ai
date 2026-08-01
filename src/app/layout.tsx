@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MirAI Melody FM",
+  title: "mirAI melody 73.9 FM",
   description: "A web application for Radio with by AI radio personality.",
 };
 

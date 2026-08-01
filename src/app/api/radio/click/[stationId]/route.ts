@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchRadioBrowserJson } from '@/app/lib/radioBrowser';
+import { legacyBackendApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,9 @@ interface RouteContext {
 const STATION_ID_PATTERN = /^[a-f0-9-]{20,64}$/i;
 
 export async function POST(request: Request, context: RouteContext) {
+  if (!legacyBackendApiEnabled()) {
+    return NextResponse.json({ error: 'Use the Cloud Run backend in production' }, { status: 404 });
+  }
   const { stationId } = await context.params;
   if (!STATION_ID_PATTERN.test(stationId)) {
     return NextResponse.json({ error: 'Invalid station ID' }, { status: 400 });

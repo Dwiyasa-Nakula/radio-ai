@@ -4,6 +4,7 @@ import { promises as fs, createReadStream } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { decodeAbsolutePath, isAudioFile } from '@/app/lib/localMusic';
+import { localFilesystemApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -21,6 +22,9 @@ const MIME: Record<string, string> = {
 };
 
 export async function GET(request: Request, context: RouteContext) {
+  if (!localFilesystemApiEnabled()) {
+    return NextResponse.json({ error: 'Local filesystem APIs are disabled in production' }, { status: 404 });
+  }
   const { id } = await context.params;
 
   let absolute: string;

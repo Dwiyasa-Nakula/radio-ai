@@ -3,12 +3,16 @@ import { NextResponse } from 'next/server';
 import path from 'node:path';
 import { parseFile } from 'music-metadata';
 import { decodeAbsolutePath, isAudioFile } from '@/app/lib/localMusic';
+import { localFilesystemApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function GET(_request: Request, context: RouteContext) {
+  if (!localFilesystemApiEnabled()) {
+    return NextResponse.json({ error: 'Local filesystem APIs are disabled in production' }, { status: 404 });
+  }
   const { id } = await context.params;
 
   let absolute: string;

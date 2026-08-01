@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!services/backend/.env.example
 cookies.txt
 
 # vercel
@@ -46,4 +48,24 @@ next-env.d.ts
 
 # media files
 /public/audio/
-/public/jingles/
+/public/jingles/*
+!/public/jingles/.gitkeep
+/public/Intro jingles/*
+!/public/Intro jingles/.gitkeep
+/public/Outro Jingle/*
+!/public/Outro Jingle/.gitkeep
+/public/ads/*
+!/public/ads/.gitkeep
+
+# backend build output
+/services/backend/dist/
+
+# Android build output and local signing/configuration
+/android-auto/.gradle/
+/android-auto/build/
+/android-auto/app/build/
+/android-auto/local.properties
+/android-auto/*.apk
+/android-auto/*.aab
+/android-auto/*.jks
+/android-auto/keystore.properties

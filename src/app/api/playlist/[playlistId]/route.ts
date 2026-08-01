@@ -2,6 +2,7 @@
 import { google, youtube_v3 } from 'googleapis';
 import { NextResponse } from 'next/server';
 import type { Track } from '@/app/lib/types';
+import { legacyBackendApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 const youtube = google.youtube({
   version: 'v3',
@@ -15,6 +16,9 @@ interface RouteContext {
 const UNAVAILABLE_TITLES = new Set(['Deleted video', 'Private video']);
 
 export async function GET(_request: Request, context: RouteContext) {
+  if (!legacyBackendApiEnabled()) {
+    return NextResponse.json({ error: 'Use the Cloud Run backend in production' }, { status: 404 });
+  }
   const { playlistId } = await context.params;
 
   if (!playlistId) {
@@ -48,6 +52,10 @@ export async function GET(_request: Request, context: RouteContext) {
             artist: snippet?.videoOwnerChannelTitle ?? 'Unknown',
             thumbnail: snippet?.thumbnails?.high?.url ?? '',
             audioUrl: `/api/audio/${videoId}`,
+            publishedAt: snippet?.publishedAt ?? undefined,
+            sourceNotes: snippet?.description
+              ? snippet.description.trim().slice(0, 1600)
+              : undefined,
           };
         })
         .filter((track): track is Track => track !== null);

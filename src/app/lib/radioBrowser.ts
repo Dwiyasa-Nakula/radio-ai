@@ -62,7 +62,7 @@ async function fetchWithTimeout(
     return await fetch(url, {
       cache: 'no-store',
       headers: {
-        'User-Agent': 'MirAI Melody FM/0.1.0',
+        'User-Agent': 'mirAI melody 73.9 FM/0.1.0',
       },
       signal: controller.signal,
     });

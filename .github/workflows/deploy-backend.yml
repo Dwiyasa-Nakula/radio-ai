@@ -1,0 +1,76 @@
+name: Deploy backend to Cloud Run
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: asia-southeast1
+  SERVICE: radio-ai-backend
+  REPOSITORY: radio-ai
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+      - run: npm test --workspace @radio-ai/backend
+      - run: npm run typecheck:backend
+      - run: npm run build:backend
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push immutable image
+        env:
+          PROJECT_ID: ${{ steps.auth.outputs.project_id }}
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${GITHUB_SHA}"
+          docker build --file services/backend/Dockerfile --tag "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy Cloud Run revision
+        env:
+          RUNTIME_SERVICE_ACCOUNT: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT }}
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --platform managed \
+            --execution-environment gen2 \
+            --cpu 1 \
+            --memory 1Gi \
+            --concurrency 4 \
+            --timeout 300 \
+            --min-instances 0 \
+            --max-instances 2 \
+            --port 8080 \
+            --service-account "$RUNTIME_SERVICE_ACCOUNT" \
+            --allow-unauthenticated \
+            --set-env-vars "^@^ALLOWED_ORIGINS=${{ vars.VERCEL_ALLOWED_ORIGINS }}" \
+            --set-secrets "BACKEND_SESSION_SECRET=BACKEND_SESSION_SECRET:latest,MOBILE_DEVICE_CREDENTIAL_HASHES=MOBILE_DEVICE_CREDENTIAL_HASHES:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,TOMTOM_API_KEY=TOMTOM_API_KEY:latest"
+
+      - name: Smoke test deployed revision
+        run: |
+          URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
+          curl --fail --retry 5 --retry-delay 3 "$URL/health"
+          curl --fail --retry 5 --retry-delay 3 "$URL/readyz"

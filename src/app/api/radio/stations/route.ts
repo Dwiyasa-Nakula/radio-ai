@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { fetchRadioBrowserJson } from '@/app/lib/radioBrowser';
 import type { RadioCountryCode, RadioStation } from '@/app/lib/types';
+import type { AudioQuality } from '@/app/lib/types';
+import { rankRadioStations } from '@/app/lib/radioQuality';
+import { legacyBackendApiEnabled } from '@/app/lib/localFilesystemGuard';
 
 export const runtime = 'nodejs';
 
@@ -72,9 +75,16 @@ function mapStation(
 }
 
 export async function GET(request: Request) {
+  if (!legacyBackendApiEnabled()) {
+    return NextResponse.json({ error: 'Use the Cloud Run backend in production' }, { status: 404 });
+  }
   const { searchParams } = new URL(request.url);
   const rawCountry = searchParams.get('country')?.toUpperCase() as RadioCountryCode | undefined;
   const country = rawCountry && COUNTRY_CODES.has(rawCountry) ? rawCountry : null;
+  const rawQuality = searchParams.get('quality');
+  const quality: AudioQuality = rawQuality === 'balanced' || rawQuality === 'dataSaver'
+    ? rawQuality
+    : 'high';
 
   if (!country) {
     return NextResponse.json(
@@ -88,7 +98,7 @@ export async function GET(request: Request) {
       hidebroken: 'true',
       order: 'clickcount',
       reverse: 'true',
-      limit: '200',
+      limit: '500',
     });
     const rawStations = await fetchRadioBrowserJson<RadioBrowserStation[]>(
       `/json/stations/bycountrycodeexact/${country}?${params.toString()}`,
@@ -110,12 +120,12 @@ export async function GET(request: Request) {
       seen.add(station.id);
       seenStreams.add(station.streamUrl);
       stations.push(station);
-      if (stations.length >= 80) break;
     }
 
-    return NextResponse.json(stations, {
+    return NextResponse.json(rankRadioStations(stations, quality).slice(0, 80), {
       headers: {
         'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600',
+        'X-Audio-Quality': quality,
       },
     });
   } catch (error) {

@@ -1,0 +1,33 @@
+{
+  "name": "@radio-ai/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.mjs --packages=external",
+    "start": "node dist/server.mjs",
+    "test": "tsx --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/community": "^1.1.29",
+    "@langchain/core": "^1.2.3",
+    "@radio-ai/contracts": "0.1.0",
+    "cors": "^2.8.5",
+    "duck-duck-scrape": "^2.2.7",
+    "express": "^5.1.0",
+    "fast-xml-parser": "^5.8.0",
+    "googleapis": "^154.1.0",
+    "jose": "^6.1.2",
+    "music-metadata": "^11.12.3",
+    "youtube-dl-exec": "^3.1.7"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "esbuild": "^0.25.8",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
+}

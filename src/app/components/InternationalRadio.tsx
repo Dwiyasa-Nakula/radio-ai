@@ -3,9 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import LiveRadioPlayer from './LiveRadioPlayer';
 import type { RadioCountryCode, RadioStation } from '../lib/types';
+import type { AudioQuality } from '../lib/types';
+import { backendFetch } from '../lib/backendClient';
 
 interface InternationalRadioProps {
   onStationChange: (station: RadioStation | null) => void;
+  quality: AudioQuality;
 }
 
 const COUNTRIES: Array<{ code: RadioCountryCode; label: string; flag: string }> = [
@@ -28,6 +31,7 @@ function stationDetails(station: RadioStation): string {
 
 const InternationalRadio: React.FC<InternationalRadioProps> = ({
   onStationChange,
+  quality,
 }) => {
   const [country, setCountry] = useState<RadioCountryCode>('JP');
   const [stations, setStations] = useState<RadioStation[]>([]);
@@ -36,10 +40,11 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
-  const stationCache = useRef<Map<RadioCountryCode, RadioStation[]>>(new Map());
+  const stationCache = useRef<Map<string, RadioStation[]>>(new Map());
 
   useEffect(() => {
-    const cached = stationCache.current.get(country);
+    const cacheKey = `${country}:${quality}`;
+    const cached = stationCache.current.get(cacheKey);
     if (cached) {
       setStations(cached);
       setIsLoading(false);
@@ -52,9 +57,11 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
     setError(null);
     setStations([]);
 
-    fetch(`/api/radio/stations?country=${country}`, {
-      signal: controller.signal,
-    })
+    backendFetch(
+      `/v1/radio/stations?country=${country}&quality=${quality}`,
+      { signal: controller.signal },
+      `/api/radio/stations?country=${country}&quality=${quality}`
+    )
       .then(async (response) => {
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
@@ -63,7 +70,7 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
         return response.json() as Promise<RadioStation[]>;
       })
       .then((data) => {
-        stationCache.current.set(country, data);
+        stationCache.current.set(cacheKey, data);
         setStations(data);
       })
       .catch((fetchError) => {
@@ -79,7 +86,7 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
       });
 
     return () => controller.abort();
-  }, [country, retryNonce]);
+  }, [country, quality, retryNonce]);
 
   useEffect(() => {
     return () => onStationChange(null);
@@ -112,10 +119,10 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
   const chooseStation = (station: RadioStation) => {
     setSelectedStation(station);
     onStationChange(station);
-    fetch(`/api/radio/click/${encodeURIComponent(station.id)}`, {
+    void backendFetch(`/v1/radio/click/${encodeURIComponent(station.id)}`, {
       method: 'POST',
       keepalive: true,
-    }).catch(() => {
+    }, `/api/radio/click/${encodeURIComponent(station.id)}`).catch(() => {
       // Play-count reporting must never block listening.
     });
   };
@@ -127,7 +134,7 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
           <div>
             <h2 className="text-lg font-semibold">International Radio</h2>
             <p className="text-xs text-gray-400">
-              Live stations from Japan, China, and South Korea.
+              Live stations from Japan, China, and South Korea. {quality === 'dataSaver' ? 'Data Saver' : quality === 'balanced' ? 'Balanced' : 'High'} ranking is active.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -178,7 +185,7 @@ const InternationalRadio: React.FC<InternationalRadioProps> = ({
             <button
               type="button"
               onClick={() => {
-                stationCache.current.delete(country);
+                stationCache.current.delete(`${country}:${quality}`);
                 setRetryNonce((current) => current + 1);
               }}
               className="mt-3 rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold"

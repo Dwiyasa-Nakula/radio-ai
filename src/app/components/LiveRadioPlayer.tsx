@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { RadioStation } from '../lib/types';
 
 interface LiveRadioPlayerProps {
@@ -12,7 +12,23 @@ const LiveRadioPlayer: React.FC<LiveRadioPlayerProps> = ({ station }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
   const [hasError, setHasError] = useState(false);
-  const [volume, setVolume] = useState(0.35);
+  const [volume, setVolumeState] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('radio-ai:volume');
+      if (saved !== null) {
+        const val = parseFloat(saved);
+        if (!isNaN(val)) return val;
+      }
+    }
+    return 0.35;
+  });
+
+  const setVolume = useCallback((val: number) => {
+    setVolumeState(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('radio-ai:volume', val.toString());
+    }
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -69,33 +85,33 @@ const LiveRadioPlayer: React.FC<LiveRadioPlayerProps> = ({ station }) => {
         }}
       />
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-center gap-4">
         {station.favicon ? (
           <img
             src={station.favicon}
             alt=""
-            className="w-24 h-24 rounded-xl bg-white/90 object-contain p-2 shadow-lg"
+            className="w-24 h-24 rounded-xl bg-white/90 object-contain p-2 shadow-lg mx-auto sm:mx-0 shrink-0"
           />
         ) : (
           <div
             aria-hidden="true"
-            className="w-24 h-24 rounded-xl bg-white/8 border border-white/10 grid place-items-center text-3xl"
+            className="w-24 h-24 rounded-xl bg-white/8 border border-white/10 grid place-items-center text-3xl mx-auto sm:mx-0 shrink-0"
           >
             📻
           </div>
         )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-red-300">
+        <div className="w-full min-w-0 flex-1">
+          <div className="flex items-center justify-center sm:justify-start gap-2 text-xs uppercase tracking-[0.18em] text-red-300">
             <span className="inline-block h-2 w-2 rounded-full bg-red-400 animate-pulse" />
             Live
           </div>
-          <h2 className="mt-1 truncate text-xl font-semibold">{station.name}</h2>
-          <p className="truncate text-sm text-gray-300">
+          <h2 className="mt-1 truncate text-xl font-semibold text-center sm:text-left">{station.name}</h2>
+          <p className="truncate text-sm text-gray-300 text-center sm:text-left">
             {[station.state, station.country].filter(Boolean).join(', ')}
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-3">
             <button
               type="button"
               onClick={togglePlayback}
@@ -103,7 +119,7 @@ const LiveRadioPlayer: React.FC<LiveRadioPlayerProps> = ({ station }) => {
             >
               {isPlaying ? 'Pause' : isBuffering ? 'Connecting…' : 'Play'}
             </button>
-            <label className="ml-auto flex items-center gap-2 text-xs text-gray-300">
+            <label className="sm:ml-auto flex items-center justify-center sm:justify-start gap-2 text-xs text-gray-300 w-full sm:w-auto mt-2 sm:mt-0">
               Volume
               <input
                 type="range"
@@ -120,7 +136,7 @@ const LiveRadioPlayer: React.FC<LiveRadioPlayerProps> = ({ station }) => {
             </label>
           </div>
           {hasError && (
-            <p className="mt-2 text-sm text-red-300">
+            <p className="mt-2 text-sm text-red-300 text-center sm:text-left">
               This station did not respond. Try another station.
             </p>
           )}
