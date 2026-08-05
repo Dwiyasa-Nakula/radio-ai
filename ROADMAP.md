@@ -10,7 +10,8 @@ Items are ordered by recommended priority.
 - [ ] Run the instrumented Compose and Keystore tests on an emulator/device and complete Android Auto Desktop Head Unit browsing, playback, reconnect, and distraction-compliance checks.
 - [ ] Exercise connectivity loss during every show segment, stale weather/news fallback, cache eviction, next-cycle prefetch, and automatic reconnection on real hardware.
 - [ ] Configure GitHub Workload Identity Federation with separate deployer and runtime identities, add the three documented repository secrets, test manual dispatch, and only then consider enabling deploy-on-push.
-- [ ] If the web product will be deployed, set the exact Vercel origin in Cloud Run CORS, configure Vercel `BACKEND_URL` and the matching session secret, then verify the browser session exchange and range seeking.
+- [x] Deploy the root Next.js web product to Vercel, configure the matching backend session secret and exact Cloud Run CORS origin, and verify the page, session exchange, and authenticated local media path.
+- [ ] Select and validate a reliable non-Cloud-Run YouTube egress strategy before promoting `radio-ai-backend-00006-gap`; representative seeded-playlist tracks still trigger `YOUTUBE_CHALLENGE` from Cloud Run.
 - [ ] Add Google Cloud budget alerts, Cloud Run error/latency alerts, Secret Manager rotation reminders, and an Artifact Registry retention policy.
 - [ ] Resolve Gradle deprecation warnings before upgrading to Gradle 10; keep Java 17+ and Android SDK discovery documented for clean machines.
 - [ ] Reconcile GitHub's post-push Dependabot alerts after its dependency graph refresh. Local `npm audit` reports zero vulnerabilities; review any remaining alerts for Gradle or stale lockfile data individually.

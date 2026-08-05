@@ -10,13 +10,16 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Added frontend/backend CI and Playwright browser smoke coverage.
 - Added pinned `mweb` PO-token attestation for yt-dlp, typed provider failures, retry/circuit-breaking, and automatic web queue continuation.
 - Added PO-provider readiness reporting and a documented YouTube-disable fallback.
+- Deployed the repository-root Next.js frontend to `https://radio-ai-three.vercel.app` with production session secrets and verified Cloud Run CORS.
+- Recorded the 0%-traffic yt-dlp canary results: EJS/PO attestation fixes the control format, but representative playlist tracks remain blocked by Cloud Run egress reputation.
+- Added a frontend-only `vercel.json` so the backend workspace is never deployed as a Vercel service.
 
   Still required:
 
 - Create and securely archive an Android release-signing keystore.
 - Test a signed APK, upgrades, airplane mode, and Android Auto DHU on real hardware.
 - Configure GitHub Workload Identity Federation; deployment remains manual-only until then.
-- Configure Vercel URL/CORS if the website will use the backend.
+- Select and validate a reliable non-Cloud-Run YouTube egress strategy before promoting the yt-dlp candidate.
 - Add Google Cloud budgets, alerts, secret rotation, and image-retention policies.
 - Recheck GitHub’s Dependabot alerts after its dependency graph refresh.
 - Address Gradle deprecations before Gradle 10.

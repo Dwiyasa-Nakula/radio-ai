@@ -1,5 +1,24 @@
 # Vercel + Google Cloud Run deployment
 
+## Current web deployment
+
+| Setting | Value |
+| --- | --- |
+| Vercel project | `dwiyasanakulas-projects/radio-ai` |
+| Production URL | `https://radio-ai-three.vercel.app` |
+| GitHub repository | `Dwiyasa-Nakula/radio-ai` |
+| Production branch | `main` |
+| Framework / root | Next.js / repository root (`.`) |
+| Install / build | `npm ci --legacy-peer-deps` / `npm run build` |
+| Output directory | Next.js default |
+| Vercel Node.js | `24.x` |
+
+The production deployment was verified end to end: the page returned `200`,
+`/api/backend/session` issued a scoped token, and an authenticated local media request to
+Cloud Run returned `200` with `Access-Control-Allow-Origin` set to the production Vercel
+origin. The Vercel project deploys only the root Next.js application. The Express workspace
+at `services/backend` is not a Vercel service.
+
 ## Current production backend
 
 | Setting | Value |
@@ -10,13 +29,18 @@
 | Artifact Registry repository | `radio-ai` |
 | Runtime service account | `radio-ai-backend-runtime@mirai-melody-radio-rqjoki.iam.gserviceaccount.com` |
 | Canonical backend URL | `https://radio-ai-backend-dktu4p5zqq-as.a.run.app` |
+| Production revision | `radio-ai-backend-00007-vol` |
+| Allowed browser origin | `https://radio-ai-three.vercel.app` |
 
-The current backend was deployed manually and is live. GitHub deployment is intentionally
-manual-only until Workload Identity Federation and the repository secrets described below
-are configured. Never put the Android enrollment credential, API keys, signing secret, or
-service-account keys in this repository.
+The current production revision is a CORS-only clone of the previous production image
+(`radio-ai-backend-00003-kvf`); only `ALLOWED_ORIGINS` changed. The newer yt-dlp image is
+revision `radio-ai-backend-00006-gap`, tagged `pot-canary`, and remains at 0% traffic because
+representative playlist playback still hits YouTube's Cloud Run egress challenge. GitHub
+backend deployment remains manual-only until Workload Identity Federation is configured.
+Never put Android enrollment credentials, API keys, signing secrets, or service-account keys
+in this repository.
 
-The production provider is fixed: the Next.js web application deploys from the repository root to Vercel, and the stateful/heavy Node.js service in `services/backend` deploys to Google Cloud Run in `asia-southeast1`.
+The production deployment split is fixed: the Next.js web application deploys from the repository root to Vercel, and the stateful/heavy Node.js service in `services/backend` deploys to Google Cloud Run in `asia-southeast1`.
 
 ## Architecture
 
@@ -73,7 +97,7 @@ All YouTube-resolution and DuckDuckGo research caches are disposable in-memory L
 6. For GitHub deployment, create a separate deployer service account with Cloud Run admin, Artifact Registry writer, and Service Usage Consumer. Grant it Service Account User on the runtime identity; do not use it as the runtime identity.
 7. Configure a GitHub Workload Identity Federation provider restricted to `Dwiyasa-Nakula/radio-ai` and `refs/heads/main`.
 8. Add these GitHub Actions secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT`.
-9. Set GitHub Actions variable `VERCEL_ALLOWED_ORIGINS` to exact comma-separated production and preview origins. For Android-only operation use `https://localhost.invalid` until a website origin is available.
+9. Set GitHub Actions variable `VERCEL_ALLOWED_ORIGINS` to `https://radio-ai-three.vercel.app`. Add preview origins only when they are deliberately enabled; never use `*`.
 
 `.github/workflows/deploy-backend.yml` tests, builds, pushes a commit-SHA image, and deploys that immutable image. It currently runs only through **Actions > Deploy backend to Cloud Run > Run workflow**. After the WIF bindings and repository values have been verified, a `push` trigger for `main` may be added deliberately. No long-lived Google service-account key is stored in GitHub.
 
@@ -106,7 +130,7 @@ gcloud run deploy $service `
   --min-instances 0 --max-instances 2 --port 8080 `
   --service-account "radio-ai-backend-runtime@$projectId.iam.gserviceaccount.com" `
   --allow-unauthenticated `
-  --set-env-vars "ALLOWED_ORIGINS=https://localhost.invalid" `
+  --set-env-vars "ALLOWED_ORIGINS=https://radio-ai-three.vercel.app" `
   --set-secrets "BACKEND_SESSION_SECRET=BACKEND_SESSION_SECRET:latest,MOBILE_DEVICE_CREDENTIAL_HASHES=MOBILE_DEVICE_CREDENTIAL_HASHES:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,TOMTOM_API_KEY=TOMTOM_API_KEY:latest"
 ```
 
@@ -138,16 +162,47 @@ after confirming the replacement device works.
 
 ## Vercel setup
 
-Import the repository with the root directory unchanged and use Vercel's Git integration. Configure server-side variables for Production and Preview:
+The repository is already linked to the `radio-ai` Vercel project and to GitHub. For a new
+account or disaster recovery, import `Dwiyasa-Nakula/radio-ai` and use these exact settings:
 
-| Variable | Purpose |
+| Setting | Value |
 | --- | --- |
-| `BACKEND_URL` | Cloud Run service URL, without trailing slash |
-| `BACKEND_SESSION_SECRET` | Same 32+ character value as Secret Manager |
+| Framework preset | Next.js |
+| Root directory | Repository root (`.`); do not select `services/backend` |
+| Install command | `npm ci --legacy-peer-deps` |
+| Build command | `npm run build` |
+| Output directory | Next.js default (leave blank) |
 
-Provider credentials belong only in Cloud Run after migration. `LOCAL_MUSIC_DIR` is meaningful only for local development/self-hosting and does not make a Vercel machine able to read the user's computer.
+`vercel.json` pins the frontend-only framework and commands so Vercel's workspace detector
+does not turn `services/backend` into a second Vercel service.
 
-Deploy Cloud Run first, set `BACKEND_URL`, then promote the Vercel preview. Browser directory permission may require renewal after a browser restart even though the directory handle and scan metadata are stored in IndexedDB. Browsers without persistent directory handles use a clearly marked session-only directory-input fallback.
+Configure these server-side variables for **Production**:
+
+| Variable | Value / purpose |
+| --- | --- |
+| `BACKEND_URL` | `https://radio-ai-backend-dktu4p5zqq-as.a.run.app` (no trailing slash) |
+| `BACKEND_SESSION_SECRET` | Sensitive; exactly the same 32+ character value as Google Secret Manager |
+
+Do not use a `NEXT_PUBLIC_` prefix. Provider credentials belong only in Cloud Run.
+`LOCAL_MUSIC_DIR` is meaningful only for local development/self-hosting and does not let a
+Vercel Function read a user's computer. Environment-variable changes require a new Vercel
+deployment.
+
+After deployment, set Cloud Run `ALLOWED_ORIGINS` to the exact stable production domain:
+
+```powershell
+gcloud run deploy radio-ai-backend `
+  --project mirai-melody-radio-rqjoki `
+  --region asia-southeast1 `
+  --image YOUR_VERIFIED_IMAGE `
+  --update-env-vars "ALLOWED_ORIGINS=https://radio-ai-three.vercel.app" `
+  --no-traffic --tag web-origin-canary
+```
+
+Test the tagged revision's preflight and an authenticated `/v1` request before shifting
+traffic. Preview deployments require explicit preview origins; they are not currently
+allowed. Browser directory permission may require renewal after a browser restart even
+though handles and scan metadata are stored in IndexedDB.
 
 ## Playback and privacy checks
 
@@ -160,7 +215,7 @@ Deploy Cloud Run first, set `BACKEND_URL`, then promote the Vercel preview. Brow
 
 ## YouTube playback attestation
 
-The backend image pins `yt-dlp` (including its matching EJS challenge scripts) and `bgutil-ytdlp-pot-provider` to `2026.3.17`
+The current source and unpromoted candidate image pin `yt-dlp` (including its matching EJS challenge scripts) and `bgutil-ytdlp-pot-provider` to `2026.3.17`
 and `1.3.1`. The container starts the provider on loopback port `4416`, waits for
 `GET /ping`, and only then starts the API. `GET /readyz` reports
 `youtubeProvider` as `ready`, `unavailable`, or `disabled`.
@@ -183,6 +238,16 @@ Set `YOUTUBE_STREAMING_ENABLED=false` to launch without YouTube while retaining
 local music, live radio, and host segments. A PO token reduces bot challenges but
 cannot guarantee that YouTube will accept Cloud Run egress. Do not commit cookies
 or add account credentials as an automatic fallback.
+
+### Verified Cloud Run limitation (2026-08-05)
+
+Revision `radio-ai-backend-00006-gap` passed health/readiness and returned a valid
+`206 audio/mp4` range for the control video `dQw4w9WgXcQ`. Multiple representative tracks
+from the seeded playlist still returned structured `YOUTUBE_CHALLENGE` responses with both
+`mweb` and `android_vr`. The identical image resolved those tracks from a Cloud Build worker,
+which isolates the remaining failure to Cloud Run egress reputation. Do not promote this
+candidate as a complete YouTube fix. A clean self-hosted/VPS network or a carefully evaluated
+outbound proxy is still required for dependable YouTube playback.
 
 To verify the image before promotion, confirm the provider and audio range path:
 
@@ -225,7 +290,9 @@ Then verify:
 
 1. `/health` and `/readyz` return 200.
 2. An unauthenticated `/v1` request returns 401.
-3. A Vercel preview obtains `/api/backend/session`, passes CORS, lists a YouTube playlist, and range-seeks audio.
+3. The production Vercel origin obtains /api/backend/session, passes CORS, and plays a
+   local backend media asset. Test representative YouTube ranges separately; a structured
+   YOUTUBE_CHALLENGE is a failed promotion gate, not a passing result.
 4. Android obtains `/v1/mobile/session` with `Authorization: Device ...`; invalid and revoked credentials return 401, and the returned JWT expires in one hour.
 5. All quality modes return distinct YouTube cache headers and expected radio ordering.
 6. DuckDuckGo success, timeout/rate-limit, malformed, irrelevant, and injection-like snippets all leave playback usable.
@@ -242,4 +309,10 @@ gcloud run revisions list --service radio-ai-backend --region asia-southeast1
 gcloud run services update-traffic radio-ai-backend --region asia-southeast1 --to-revisions REVISION_NAME=100
 ```
 
-For Vercel, promote the last known-good deployment from the dashboard or redeploy its commit. Backend and web rollbacks are independent; if a contract change requires both, roll the web back first, then Cloud Run.
+Current reference points:
+
+- Web/CORS production: `radio-ai-backend-00007-vol`.
+- Previous backend image without the Vercel origin: `radio-ai-backend-00003-kvf`.
+- Unpromoted yt-dlp candidate: `radio-ai-backend-00006-gap` (`pot-canary`, 0%).
+
+For Vercel, promote the last known-good deployment from the dashboard or redeploy its commit. Backend and web rollbacks are independent; if a contract change requires both, roll the web back first, then Cloud Run. Rolling back to `00003-kvf` also removes the production Vercel origin and will break browser CORS.

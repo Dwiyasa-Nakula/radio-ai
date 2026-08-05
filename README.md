@@ -106,6 +106,20 @@ radio-ai/
 
 ---
 
+## Live Deployment
+
+- Web application: [https://radio-ai-three.vercel.app](https://radio-ai-three.vercel.app)
+- Backend: `https://radio-ai-backend-dktu4p5zqq-as.a.run.app`
+- Vercel deploys the repository-root Next.js application; `services/backend` deploys only to Google Cloud Run.
+
+The web page, short-lived session exchange, production CORS, and authenticated local media
+were verified end to end. YouTube playback from Cloud Run is still not dependable because
+representative playlist tracks trigger YouTube's data-center egress challenge. Local music,
+live radio, TTS, jingles, and ads do not depend on that YouTube extraction path. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for current revisions, recovery steps, and promotion gates.
+
+---
+
 ## Prerequisites
 
 - Node.js 20+
@@ -123,7 +137,7 @@ radio-ai/
    ```bash
    git clone <repo-url>
    cd radio-ai
-   npm install
+   npm ci --legacy-peer-deps
    ```
 2. **Configure Environment Variables (`.env.local`)**:
 
@@ -132,7 +146,7 @@ radio-ai/
    LOCAL_MUSIC_DIR=D:\Music
 
    # Production web -> Cloud Run connection
-   BACKEND_URL=https://radio-ai-backend-xxxxxxxxxx-as.a.run.app
+   BACKEND_URL=https://radio-ai-backend-dktu4p5zqq-as.a.run.app
    BACKEND_SESSION_SECRET=replace-with-at-least-32-random-characters
 
    # AI Radio Host
