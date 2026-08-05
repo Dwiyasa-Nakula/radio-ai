@@ -51,18 +51,16 @@ test('radio ranking follows high, balanced, and data saver priorities', () => {
   assert.equal(rankRadioStations(stations, 'dataSaver')[0].id, 'efficient');
 });
 
-test('YouTube extraction uses mweb and the configured PO-token provider', () => {
+test('YouTube extraction uses current default clients and the configured PO-token provider', () => {
   const original = process.env.YOUTUBE_PO_PROVIDER_URL;
   process.env.YOUTUBE_PO_PROVIDER_URL = 'http://127.0.0.1:4416';
   try {
     const args = youtubeExtractorArguments();
-    assert.ok(args.includes('youtube:player_client=mweb'));
     assert.deepEqual(args.slice(0, 2), ['--js-runtimes', 'node']);
+    assert.ok(args.includes('youtube:player_client=default'));
     assert.ok(args.includes('youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416'));
+    assert.ok(!args.some((argument) => argument.includes('player_client=mweb')));
     assert.ok(!args.some((argument) => argument.includes('player_client=android')));
-    const fallbackArgs = youtubeExtractorArguments('android_vr');
-    assert.ok(fallbackArgs.includes('youtube:player_client=android_vr'));
-    assert.ok(!fallbackArgs.some((argument) => argument.includes('youtubepot-bgutilhttp')));
   } finally {
     if (original === undefined) delete process.env.YOUTUBE_PO_PROVIDER_URL;
     else process.env.YOUTUBE_PO_PROVIDER_URL = original;

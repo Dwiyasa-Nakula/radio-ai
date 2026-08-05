@@ -153,16 +153,16 @@ export function youtubeCacheKey(videoId: string, quality: AudioQuality): string 
   return `${videoId}:${quality}`;
 }
 
-type YouTubePlayerClient = 'mweb' | 'android_vr';
+type YouTubePlayerClient = 'default';
 
-export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'mweb'): string[] {
+export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'default'): string[] {
   const providerUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim();
   return [
     '--js-runtimes',
     'node',
     '--extractor-args',
     'youtube:player_client=' + playerClient,
-    ...(providerUrl && playerClient === 'mweb'
+    ...(providerUrl
       ? ['--extractor-args', 'youtubepot-bgutilhttp:base_url=' + providerUrl]
       : []),
   ];
@@ -172,7 +172,7 @@ async function resolveFresh(videoId: string, quality: AudioQuality): Promise<Res
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   let stdout: string | undefined;
   let extractionError: unknown;
-  const clients: YouTubePlayerClient[] = ['mweb', 'android_vr'];
+  const clients: YouTubePlayerClient[] = ['default'];
 
   for (const playerClient of clients) {
     try {
