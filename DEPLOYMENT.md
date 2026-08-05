@@ -93,6 +93,9 @@ gcloud auth login
 gcloud config set project $projectId
 gcloud auth configure-docker "$region-docker.pkg.dev" --quiet
 docker build --file services/backend/Dockerfile --tag $image .
+
+# Docker Desktop alternative: build the same image remotely with Cloud Build.
+gcloud builds submit --config services/backend/cloudbuild.yaml --substitutions "_IMAGE=$image" .
 docker push $image
 
 gcloud run deploy $service `
@@ -155,6 +158,54 @@ Deploy Cloud Run first, set `BACKEND_URL`, then promote the Vercel preview. Brow
 - Gemini TTS remains its native lossless 24 kHz, 16-bit mono PCM/WAV output.
 - Only sanitized song metadata can be sent for researched chatter. File bytes, artwork, local paths, and directory handles remain in the browser.
 
+## YouTube playback attestation
+
+The backend image pins `yt-dlp` (including its matching EJS challenge scripts) and `bgutil-ytdlp-pot-provider` to `2026.3.17`
+and `1.3.1`. The container starts the provider on loopback port `4416`, waits for
+`GET /ping`, and only then starts the API. `GET /readyz` reports
+`youtubeProvider` as `ready`, `unavailable`, or `disabled`.
+
+The extractor enables the container's Node 22 JavaScript runtime, uses the `mweb` client, and obtains a new video-bound PO token from
+the local provider. If Cloud Run egress is challenged, it makes one cookie-free
+`android_vr` fallback attempt. Provider stdout is suppressed because it includes
+ephemeral token material. It does not use a YouTube account or cookies. After three
+consecutive bot challenges, extraction pauses for five minutes and returns:
+
+```json
+{
+  "error": "YouTube is temporarily unavailable",
+  "code": "YOUTUBE_CHALLENGE",
+  "retryable": true
+}
+```
+
+Set `YOUTUBE_STREAMING_ENABLED=false` to launch without YouTube while retaining
+local music, live radio, and host segments. A PO token reduces bot challenges but
+cannot guarantee that YouTube will accept Cloud Run egress. Do not commit cookies
+or add account credentials as an automatic fallback.
+
+To verify the image before promotion, confirm the provider and audio range path:
+
+```bash
+curl --fail http://127.0.0.1:8080/readyz
+curl --fail --range 0-65535 \
+  -H "Authorization: Bearer $BACKEND_TEST_TOKEN" \
+  "http://127.0.0.1:8080/v1/youtube/audio/dQw4w9WgXcQ?quality=balanced" \
+  --output /dev/null
+```
+
+## Private-link web deployment
+
+An unlisted Vercel URL is a convenience boundary, not authentication. Anyone who
+obtains the URL can request a short-lived backend session and consume configured
+provider quotas. Keep Cloud Run at the documented maximum instance count, enable
+billing alerts, and add real login enforcement before sharing the application
+publicly.
+
+Deploy Vercel from the repository root with only `BACKEND_URL` and
+`BACKEND_SESSION_SECRET`. After the stable Vercel URL exists, set that exact HTTPS
+origin in Cloud Run `ALLOWED_ORIGINS`; preview origins must be added explicitly.
+
 ## Release smoke tests
 
 Run before promotion:
@@ -166,6 +217,8 @@ npm run typecheck
 npm run typecheck:backend
 npm run build
 npm run build:backend
+npm run lint
+npm run test:e2e
 ```
 
 Then verify:

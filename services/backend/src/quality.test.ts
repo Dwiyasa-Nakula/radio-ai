@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rankRadioStations } from '../../../src/app/lib/radioQuality';
-import { youtubeCacheKey, youtubeFormatSelector } from '../../../src/app/lib/youtubeAudioCache';
+import {
+  isYouTubeChallengeError,
+  youtubeCacheKey,
+  youtubeExtractorArguments,
+  youtubeFormatSelector,
+} from '../../../src/app/lib/youtubeAudioCache';
 import type { RadioStation } from '../../../src/app/lib/types';
 
 function station(id: string, codec: string, bitrate: number, votes: number): RadioStation {
@@ -44,4 +49,28 @@ test('radio ranking follows high, balanced, and data saver priorities', () => {
   assert.equal(rankRadioStations(stations, 'high')[0].id, 'modern');
   assert.equal(rankRadioStations(stations, 'balanced')[0].id, 'popular');
   assert.equal(rankRadioStations(stations, 'dataSaver')[0].id, 'efficient');
+});
+
+test('YouTube extraction uses mweb and the configured PO-token provider', () => {
+  const original = process.env.YOUTUBE_PO_PROVIDER_URL;
+  process.env.YOUTUBE_PO_PROVIDER_URL = 'http://127.0.0.1:4416';
+  try {
+    const args = youtubeExtractorArguments();
+    assert.ok(args.includes('youtube:player_client=mweb'));
+    assert.deepEqual(args.slice(0, 2), ['--js-runtimes', 'node']);
+    assert.ok(args.includes('youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416'));
+    assert.ok(!args.some((argument) => argument.includes('player_client=android')));
+    const fallbackArgs = youtubeExtractorArguments('android_vr');
+    assert.ok(fallbackArgs.includes('youtube:player_client=android_vr'));
+    assert.ok(!fallbackArgs.some((argument) => argument.includes('youtubepot-bgutilhttp')));
+  } finally {
+    if (original === undefined) delete process.env.YOUTUBE_PO_PROVIDER_URL;
+    else process.env.YOUTUBE_PO_PROVIDER_URL = original;
+  }
+});
+
+test('YouTube bot and PO-token failures are classified as retryable challenges', () => {
+  assert.equal(isYouTubeChallengeError(new Error("Sign in to confirm you're not a bot")), true);
+  assert.equal(isYouTubeChallengeError({ stderr: 'PO Token provider is not available' }), true);
+  assert.equal(isYouTubeChallengeError(new Error('Googlevideo 500')), false);
 });

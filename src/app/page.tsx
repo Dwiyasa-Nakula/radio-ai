@@ -1125,6 +1125,14 @@ export default function Home() {
                     ? nextItem.track.normalizationGain ?? 1
                     : 1
                 }
+                autoSkipOnError={
+                  currentItem.kind === 'song' && currentItem.track.source === 'youtube'
+                }
+                playbackErrorMessage={
+                  currentItem.kind === 'song' && currentItem.track.source === 'youtube'
+                    ? 'YouTube temporarily unavailable — skipping this song'
+                    : 'Playback error'
+                }
               />
             ) : (
               <div className="radio-glass text-white p-4 rounded-lg shadow-lg w-full text-center">

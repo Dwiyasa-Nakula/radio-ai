@@ -35,7 +35,10 @@ import { synthesize, synthesizeAnyVoice } from '../../../src/app/lib/tts';
 import type { AnnouncerLanguage, RadioCountryCode, RadioStation, Track } from '../../../src/app/lib/types';
 import {
   invalidateYouTubeAudio,
+  isYouTubeChallengeError,
   resolveYouTubeAudio,
+  YouTubeChallengeError,
+  YOUTUBE_CHALLENGE_CODE,
   type ResolvedYouTubeAudio,
 } from '../../../src/app/lib/youtubeAudioCache';
 import { findConfiguredAdFile, parseByteRange } from './adDelivery';
@@ -46,6 +49,7 @@ import {
   issueMobileSession,
   normalizePublicBaseUrl,
 } from './mobileAuth';
+import { YouTubeCircuitBreaker, YouTubeCircuitOpenError } from './youtubeAvailability';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
@@ -57,6 +61,9 @@ const stationMediaRotation = new MediaRotation();
 const RETRYABLE_UPSTREAM_STATUS = new Set([403, 410]);
 const UNAVAILABLE_TITLES = new Set(['Deleted video', 'Private video']);
 const mobileCredentialHashes = configuredCredentialHashes(process.env.MOBILE_DEVICE_CREDENTIAL_HASHES);
+const youtubeStreamingEnabled = process.env.YOUTUBE_STREAMING_ENABLED !== 'false';
+const youtubeProviderUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim().replace(/\/$/, '');
+const youtubeCircuit = new YouTubeCircuitBreaker();
 
 const youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
 
@@ -327,7 +334,10 @@ async function streamAdFile(
 function copyUpstreamHeaders(response: Response, upstream: globalThis.Response, entry: ResolvedYouTubeAudio, cacheStatus: string) {
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('Accept-Ranges', 'bytes');
-  response.setHeader('Content-Type', upstream.headers.get('content-type') || entry.contentType);
+  response.setHeader(
+    'Content-Type',
+    entry.contentType.startsWith('audio/') ? entry.contentType : upstream.headers.get('content-type') || entry.contentType
+  );
   response.setHeader('X-Audio-Cache', cacheStatus);
   response.setHeader('X-Audio-Quality', entry.quality);
   if (entry.codec) response.setHeader('X-Audio-Codec', entry.codec);
@@ -340,7 +350,17 @@ function copyUpstreamHeaders(response: Response, upstream: globalThis.Response, 
 }
 
 async function streamYoutubeAudio(request: Request, response: Response, videoId: string, quality: AudioQuality, forceRefresh = false): Promise<void> {
-  const { entry, cacheStatus } = await resolveYouTubeAudio(videoId, quality, forceRefresh);
+  let resolved: Awaited<ReturnType<typeof resolveYouTubeAudio>>;
+  try {
+    resolved = await resolveYouTubeAudio(videoId, quality, forceRefresh);
+  } catch (error) {
+    if (!forceRefresh && isYouTubeChallengeError(error)) {
+      invalidateYouTubeAudio(videoId, quality);
+      return streamYoutubeAudio(request, response, videoId, quality, true);
+    }
+    throw error;
+  }
+  const { entry, cacheStatus } = resolved;
   const headers = new Headers(entry.requestHeaders);
   if (request.header('range')) headers.set('Range', request.header('range')!);
   headers.set('Accept-Encoding', 'identity');
@@ -356,7 +376,12 @@ async function streamYoutubeAudio(request: Request, response: Response, videoId:
     invalidateYouTubeAudio(videoId, quality);
     return streamYoutubeAudio(request, response, videoId, quality, true);
   }
-  if (!upstream.ok && upstream.status !== 206) throw new Error(`Googlevideo ${upstream.status}`);
+  if (!upstream.ok && upstream.status !== 206) {
+    if (RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
+      throw new YouTubeChallengeError('YouTube rejected the resolved media URL');
+    }
+    throw new Error(`Googlevideo ${upstream.status}`);
+  }
   response.status(upstream.status);
   copyUpstreamHeaders(response, upstream, entry, cacheStatus);
   if (request.method === 'HEAD' || !upstream.body) {
@@ -394,14 +419,30 @@ app.use((request, response, next) => {
 const healthHandler = (_request: Request, response: Response) => response.status(200).json({ ok: true });
 app.get('/health', healthHandler);
 app.get('/healthz', healthHandler);
-app.get('/readyz', (_request, response) => {
+async function youtubeProviderState(): Promise<'ready' | 'unavailable' | 'disabled'> {
+  if (!youtubeStreamingEnabled) return 'disabled';
+  if (!youtubeProviderUrl) return process.env.NODE_ENV === 'production' ? 'unavailable' : 'disabled';
+  try {
+    const result = await fetch(youtubeProviderUrl + '/ping', {
+      signal: AbortSignal.timeout(1_500),
+      cache: 'no-store',
+    });
+    return result.ok ? 'ready' : 'unavailable';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+app.get('/readyz', async (_request, response) => {
+  const youtubeProvider = await youtubeProviderState();
   const ready = Boolean(
     process.env.BACKEND_SESSION_SECRET &&
     process.env.BACKEND_SESSION_SECRET.length >= 32 &&
     mobileCredentialHashes.length > 0 &&
-    (process.env.NODE_ENV !== 'production' || configuredOrigins.length > 0)
+    (process.env.NODE_ENV !== 'production' || configuredOrigins.length > 0) &&
+    youtubeProvider !== 'unavailable'
   );
-  response.status(ready ? 200 : 503).json({ ready });
+  response.status(ready ? 200 : 503).json({ ready, youtubeProvider });
 });
 
 app.post('/v1/mobile/session', async (request, response) => {
@@ -548,12 +589,47 @@ app.all('/v1/youtube/audio/:videoId', authorize('youtube:stream'), async (reques
     response.status(400).json({ error: 'Invalid video ID' });
     return;
   }
+  if (!youtubeStreamingEnabled) {
+    response.status(503).json({
+      error: 'YouTube streaming is disabled',
+      code: 'YOUTUBE_DISABLED',
+      retryable: false,
+    });
+    return;
+  }
   try {
+    youtubeCircuit.assertAvailable();
     await streamYoutubeAudio(request, response, videoId, qualityFrom(request.query.quality));
+    youtubeCircuit.recordSuccess();
   } catch (error) {
     if (request.aborted) return;
-    log('ERROR', 'youtube_audio_failed', { videoId, message: error instanceof Error ? error.message : String(error) });
-    if (!response.headersSent) response.status(502).json({ error: 'Failed to resolve or stream YouTube audio' });
+    const challenged = isYouTubeChallengeError(error) || error instanceof YouTubeCircuitOpenError;
+    if (isYouTubeChallengeError(error)) youtubeCircuit.recordChallenge();
+    const state = youtubeCircuit.state();
+    log(challenged ? 'WARNING' : 'ERROR', 'youtube_audio_failed', {
+      videoId,
+      code: challenged ? YOUTUBE_CHALLENGE_CODE : 'YOUTUBE_UPSTREAM_ERROR',
+      message: error instanceof Error ? error.message : String(error),
+    });
+    if (!response.headersSent && challenged) {
+      const retryAfterSeconds = error instanceof YouTubeCircuitOpenError
+        ? error.retryAfterSeconds
+        : state.retryAfterSeconds;
+      if (retryAfterSeconds > 0) response.setHeader('Retry-After', String(retryAfterSeconds));
+      response.status(503).json({
+        error: 'YouTube is temporarily unavailable',
+        code: YOUTUBE_CHALLENGE_CODE,
+        retryable: true,
+      });
+      return;
+    }
+    if (!response.headersSent) {
+      response.status(502).json({
+        error: 'Failed to resolve or stream YouTube audio',
+        code: 'YOUTUBE_UPSTREAM_ERROR',
+        retryable: true,
+      });
+    }
   }
 });
 

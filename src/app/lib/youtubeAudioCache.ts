@@ -4,7 +4,8 @@ import youtubeDl from 'youtube-dl-exec';
 import type { AudioQuality } from './types';
 
 const execFileAsync = promisify(execFile);
-const youtubeDlBinary = (youtubeDl as typeof youtubeDl & { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
+const bundledYoutubeDlBinary = (youtubeDl as typeof youtubeDl & { constants: { YOUTUBE_DL_PATH: string } }).constants.YOUTUBE_DL_PATH;
+const youtubeDlBinary = process.env.YT_DLP_PATH?.trim() || bundledYoutubeDlBinary;
 
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
 const FALLBACK_TTL_MS = 2 * 60 * 60 * 1000;
@@ -25,6 +26,27 @@ export interface ResolvedYouTubeAudio {
   bitrate?: number;
   sampleRate?: number;
   lossless: false;
+}
+
+export const YOUTUBE_CHALLENGE_CODE = 'YOUTUBE_CHALLENGE';
+
+export class YouTubeChallengeError extends Error {
+  readonly code = YOUTUBE_CHALLENGE_CODE;
+  readonly retryable = true;
+
+  constructor(message = 'YouTube requires fresh playback attestation') {
+    super(message);
+    this.name = 'YouTubeChallengeError';
+  }
+}
+
+export function isYouTubeChallengeError(error: unknown): boolean {
+  if (error instanceof YouTubeChallengeError) return true;
+  const candidate = error as { message?: unknown; stderr?: unknown };
+  const message = [candidate?.message, candidate?.stderr]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+  return /confirm you(?:'|’)?re not a bot|sign in to confirm|po token|provider is not available/i.test(message);
 }
 
 interface YoutubeDlPayload {
@@ -131,28 +153,60 @@ export function youtubeCacheKey(videoId: string, quality: AudioQuality): string 
   return `${videoId}:${quality}`;
 }
 
+type YouTubePlayerClient = 'mweb' | 'android_vr';
+
+export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'mweb'): string[] {
+  const providerUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim();
+  return [
+    '--js-runtimes',
+    'node',
+    '--extractor-args',
+    'youtube:player_client=' + playerClient,
+    ...(providerUrl && playerClient === 'mweb'
+      ? ['--extractor-args', 'youtubepot-bgutilhttp:base_url=' + providerUrl]
+      : []),
+  ];
+}
+
 async function resolveFresh(videoId: string, quality: AudioQuality): Promise<ResolvedYouTubeAudio> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const { stdout } = await execFileAsync(
-    youtubeDlBinary,
-    [
-      watchUrl,
-      '--dump-single-json',
-      '--no-playlist',
-      '--no-warnings',
-      '--quiet',
-      '--format',
-      youtubeFormatSelector(quality),
-      '--extractor-args',
-      'youtube:player_client=android',
-    ],
-    {
-      encoding: 'utf8',
-      timeout: 30_000,
-      windowsHide: true,
-      maxBuffer: 20 * 1024 * 1024,
+  let stdout: string | undefined;
+  let extractionError: unknown;
+  const clients: YouTubePlayerClient[] = ['mweb', 'android_vr'];
+
+  for (const playerClient of clients) {
+    try {
+      ({ stdout } = await execFileAsync(
+        youtubeDlBinary,
+        [
+          watchUrl,
+          '--dump-single-json',
+          '--no-playlist',
+          '--no-warnings',
+          '--quiet',
+          '--format',
+          youtubeFormatSelector(quality),
+          ...youtubeExtractorArguments(playerClient),
+        ],
+        {
+          encoding: 'utf8',
+          timeout: 30_000,
+          windowsHide: true,
+          maxBuffer: 20 * 1024 * 1024,
+        }
+      ));
+      extractionError = undefined;
+      break;
+    } catch (error) {
+      extractionError = error;
+      if (!isYouTubeChallengeError(error)) break;
     }
-  );
+  }
+
+  if (!stdout) {
+    if (isYouTubeChallengeError(extractionError)) throw new YouTubeChallengeError();
+    throw extractionError;
+  }
   const payload = JSON.parse(stdout) as YoutubeDlPayload;
 
   if (typeof payload.url !== 'string' || !payload.url.trim()) {

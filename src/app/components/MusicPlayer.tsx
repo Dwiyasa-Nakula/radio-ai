@@ -24,6 +24,8 @@ interface MusicPlayerProps {
   nextIsJingle?: boolean;
   normalizationGain?: number;
   nextNormalizationGain?: number;
+  autoSkipOnError?: boolean;
+  playbackErrorMessage?: string;
 }
 
 type DeckName = 'a' | 'b';
@@ -89,13 +91,13 @@ function deckTargetVolume(audio: HTMLAudioElement, userVolume: number) {
   return Math.max(0, Math.min(1, userVolume * (Number.isFinite(gain) ? gain : 1)));
 }
 
-function log(msg: string, ...args: any[]) {
+function log(msg: string, ...args: unknown[]) {
   const now = new Date();
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
   console.log(`[${timeStr}] ${msg}`, ...args);
 }
 
-function warn(msg: string, ...args: any[]) {
+function warn(msg: string, ...args: unknown[]) {
   const now = new Date();
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
   console.warn(`[${timeStr}] ${msg}`, ...args);
@@ -123,6 +125,8 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   nextIsJingle = false,
   normalizationGain = 1,
   nextNormalizationGain = 1,
+  autoSkipOnError = false,
+  playbackErrorMessage = 'Playback error',
 }) => {
   const deckARef = useRef<HTMLAudioElement>(null);
   const deckBRef = useRef<HTMLAudioElement>(null);
@@ -153,7 +157,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
   const transitionGenerationRef = useRef(0);
   const songOutroItemRef = useRef<string | null>(null);
   const lastPropItemIdRef = useRef(itemId);
+  const playbackErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transitionPhase, setTransitionPhase] = useState<TransitionPhase>('playing');
+
+  useEffect(() => () => {
+    if (playbackErrorTimerRef.current) clearTimeout(playbackErrorTimerRef.current);
+  }, []);
   const [needsInteraction, setNeedsInteraction] = useState(false);
   const [volume, setVolumeState] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -354,8 +363,9 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       });
   }, [elementFor]);
 
-  const handlePlayFailure = useCallback((err: any) => {
-    if (err && err.name === 'NotAllowedError') {
+  const handlePlayFailure = useCallback((err: unknown) => {
+    const errorName = err && typeof err === 'object' && 'name' in err ? err.name : undefined;
+    if (errorName === 'NotAllowedError') {
       warn('[MusicPlayer] Autoplay blocked. Waiting for user interaction.');
       setNeedsInteraction(true);
       document.addEventListener('click', handleInteraction);
@@ -883,6 +893,12 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       setIsPlaying(false);
       setIsReady(false);
       setHasError(true);
+      if (autoSkipOnError && !playbackErrorTimerRef.current) {
+        playbackErrorTimerRef.current = setTimeout(() => {
+          playbackErrorTimerRef.current = null;
+          onFinishedRef.current();
+        }, 1_500);
+      }
     },
   });
 
@@ -1083,7 +1099,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
                 <span>Autoplay blocked. Click anywhere on the page to start listening.</span>
               </div>
             )}
-            {hasError && <p className="player-error">Playback error</p>}
+            {hasError && <p className="player-error">{playbackErrorMessage}</p>}
             <span className="sr-only">Active audio deck: {activeDeck}</span>
           </div>
         </div>

@@ -1,7 +1,26 @@
-
 # Changelog
 
 All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
+
+## Unreleased
+
+### Deployment readiness
+
+- Fixed the frontend TypeScript workspace boundary and replaced interactive `next lint` with ESLint CLI verification.
+- Added frontend/backend CI and Playwright browser smoke coverage.
+- Added pinned `mweb` PO-token attestation for yt-dlp, typed provider failures, retry/circuit-breaking, and automatic web queue continuation.
+- Added PO-provider readiness reporting and a documented YouTube-disable fallback.
+
+  Still required:
+
+- Create and securely archive an Android release-signing keystore.
+- Test a signed APK, upgrades, airplane mode, and Android Auto DHU on real hardware.
+- Configure GitHub Workload Identity Federation; deployment remains manual-only until then.
+- Configure Vercel URL/CORS if the website will use the backend.
+- Add Google Cloud budgets, alerts, secret rotation, and image-retention policies.
+- Recheck GitHub’s Dependabot alerts after its dependency graph refresh.
+- Address Gradle deprecations before Gradle 10.
+
 
 ## [0.3.0] - 2026-08-02
 
@@ -11,7 +30,6 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - **Direct Mobile Enrollment**: Added hashed device credentials, one-hour scoped sessions, automatic refresh, and native YouTube ad metadata validation.
 - **Independent Cloud Backend**: Added the containerized Node.js backend, shared contracts, Secret Manager integration, health/readiness checks, and a verified Cloud Run deployment in Singapore.
 - **Offline-First Playback**: Added a 250 MB generated-audio cache, local transition fallback, bounded network retry, and automatic playback recovery.
-
 - **YouTube Ad Link Support**: Added support for YouTube ad links in `public/ads/ads link.json` alongside local MP3/MP4 files in a shared no-repeat rotation.
 - **Intricate Japanese Aesthetics**: Added authentic, high-density Japanese Asanoha (麻の葉) Kumiko lattice background SVG pattern and Seigaiha (青海波) wave overlays to the player canvas.
 - **Responsive Player Layout**: Optimized player components for mobile and small screens (`< 640px`), including auto-hiding the vinyl disc when space is limited.

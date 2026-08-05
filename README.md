@@ -1,3 +1,5 @@
+
+
 # mirAI melody 73.9 FM
 
 A full-featured AI radio station web application that streams from YouTube playlists, local music libraries, or live international radio stations, hosted by an AI DJ with real-time news, nationwide weather forecasts, road traffic updates, jingle breaks, and sponsor announcements.
@@ -7,23 +9,27 @@ A full-featured AI radio station web application that streams from YouTube playl
 ## Key Features
 
 ### 📻 Streaming & Audio Engine
+
 - **Dual-Deck Audio Architecture**: Native HTML5 two-deck streaming player (`deckA` / `deckB`) with smooth crossfades, automatic track preloading, BGM ducking, and song outro fades.
-- **YouTube Playlist Streaming**: Streams YouTube playlist audio on demand via `yt-dlp` stream extraction with range-request proxying and pre-fetch resolution caching.
+- **YouTube Playlist Streaming**: Streams YouTube playlist audio on demand via pinned `yt-dlp`, automatic `mweb` PO-token attestation, range-request proxying, challenge circuit-breaking, and pre-fetch resolution caching.
 - **Audio Quality Profiles**: High, Balanced, and Data Saver quality modes for YouTube streams and live radio broadcasts.
 - **Embedded ReplayGain**: Automatic track loudness normalization for tagged local audio files applied independently across decks.
 
 ### 📁 Local Library & Private Directory Storage
+
 - **Browser File System Access & IndexedDB**: Persistent, read-only local directory handle access with Web Worker recursive folder walking, ID3/Vorbis/MP4 metadata parsing, and cover-art caching.
 - **Virtualized Library & Custom Queues**: Complete `@tanstack/react-virtual` list rendering for handling unlimited track lists without UI performance bottlenecks.
 - **Local Directory Playlist Management**: Custom per-device song selection, track ordering, and persistent reshuffling.
 
 ### 🎙 AI Radio Host & Live Broadcasts
+
 - **LLM Radio Scripting**: Groq-powered radio DJ prompts (`llama-3.3-70b-versatile`) generating Japanese and English station chatter.
 - **Multi-Tier TTS Fallback Pipeline**: Google Gemini 3.1/2.5 Flash TTS → OpenRouter → Style-BERT-VITS2 → AnyVoiceLab.
 - **DuckDuckGo Song Trivia Grounding**: Web-researched song history, album details, award context, and artist background with strict hallucination and prompt-injection guards.
 - **DJ Memory & Immersion**: 10-song recent track memory and 5-announcement history for smooth DJ transitions, listener interaction prompts, and theme links.
 
 ### 📰 Scheduled Radio Segments
+
 - **NHK News Briefings**: Real-time Japanese headline RSS fetcher with customizable focus targeting.
 - **JMA Nationwide Weather**: Live 10-region Japan meteorological forecast with regional low/high temperature reports and evening precipitation guidance.
 - **TomTom Orbis Traffic Updates**: Real-time Tokyo road traffic incident reporting and congestion alerts.
@@ -33,9 +39,11 @@ A full-featured AI radio station web application that streams from YouTube playl
   - Automatic AnyVoiceLab sponsor credit generation matching the active ad.
 
 ### 🌐 International Live Radio
+
 - **Live Station Directory**: Powered by [Radio Browser](https://www.radio-browser.info/) for live streams across Japan, China, and South Korea.
 
 ### 🎨 Visuals & Aesthetics
+
 - **Modern Japanese Design System**: Custom Seigaiha (青海波) wave overlays and authentic Asanoha (麻の葉) Kumiko geometric lattice SVG backgrounds.
 - **Responsive Player**: Mobile-optimized layout with adaptive vinyl disc visibility (`hidden sm:block`) on screens smaller than 640px.
 
@@ -111,13 +119,14 @@ radio-ai/
 ## Setup & Environment
 
 1. **Clone & Install**:
+
    ```bash
    git clone <repo-url>
    cd radio-ai
    npm install
    ```
-
 2. **Configure Environment Variables (`.env.local`)**:
+
    ```env
    YOUTUBE_API_KEY=your_youtube_data_api_v3_key_here
    LOCAL_MUSIC_DIR=D:\Music
@@ -151,11 +160,12 @@ radio-ai/
    TOMTOM_BBOX=139.5,35.5,140.0,35.8
    TOMTOM_TIME_VALIDITY=present,future
    ```
-
 3. **Run Development Server**:
+
    ```bash
    npm run dev
    ```
+
    Open `http://localhost:3000` in your browser.
 
 ---
@@ -174,13 +184,16 @@ Android guide. Production infrastructure and recovery steps are documented in
 ## Usage & Features Overview
 
 ### ⚙ Settings Drawer
+
 Open the **⚙ Settings** drawer (top-right of the page) to configure:
+
 - **Broadcast**: Announcer language (Japanese/English), playback order (Full Radio Show vs. Classic Schedule), DJ memory, news focus, weather, traffic updates, ad frequency, and ReplayGain loudness normalization.
 - **Sources**: Manage saved YouTube playlists or local folders, add new sources, or switch active channels.
 - **Local Queue**: Filter, reorder, and select included tracks for local filesystem playlists. Star up to three favorites to give each one a 10% chance of one extra play per loop in Random mode.
 - **International Radio**: Browse live streams across Japan, China, and South Korea.
 
 ### 📢 Advertisements & Sponsor Credits
+
 - **Local Media**: Place `.mp3` or `.mp4` ad files in `public/ads/`. MP3 metadata tags and MP4 video artwork are read automatically.
 - **YouTube Ad Links**: Add YouTube watch links or short URLs to `public/ads/ads link.json`:
   ```json

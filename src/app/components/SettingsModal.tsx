@@ -370,7 +370,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
                 <p className="mt-2 text-[11px] text-gray-500">
-                  Full radio show runs every stage each cycle; unavailable prerecorded media or traffic audio is skipped automatically; or if you don't want a segment just turn it off below.
+                  Full radio show runs every stage each cycle; unavailable prerecorded media or traffic audio is skipped automatically; or if you don&apos;t want a segment just turn it off below.
                 </p>
               </fieldset>
 
