@@ -215,7 +215,7 @@ though handles and scan metadata are stored in IndexedDB.
 
 ## YouTube playback attestation
 
-The current source and unpromoted candidate image pin `yt-dlp` (including its matching EJS challenge scripts) and `bgutil-ytdlp-pot-provider` to `2026.3.17`
+The current source and unpromoted candidate image pin `yt-dlp` (including its matching EJS challenge scripts) and `bgutil-ytdlp-pot-provider` to `2026.07.04`
 and `1.3.1`. The container starts the provider on loopback port `4416`, waits for
 `GET /ping`, and only then starts the API. `GET /readyz` reports
 `youtubeProvider` as `ready`, `unavailable`, or `disabled`.

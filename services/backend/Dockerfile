@@ -42,7 +42,7 @@ WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-venv libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 \
   && python3 -m venv /opt/yt-dlp \
-  && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]==2026.3.17" bgutil-ytdlp-pot-provider==1.3.1 \
+  && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]==2026.7.4" bgutil-ytdlp-pot-provider==1.3.1 \
   && /opt/yt-dlp/bin/python -c "import importlib.metadata as m; assert m.version('yt-dlp-ejs'); assert m.version('bgutil-ytdlp-pot-provider')" \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=pot-build /opt/bgutil-provider/server /opt/bgutil-provider/server
