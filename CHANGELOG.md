@@ -12,6 +12,7 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Added PO-provider readiness reporting and a documented YouTube-disable fallback.
 - Deployed the repository-root Next.js frontend to `https://radio-ai-three.vercel.app` with production session secrets and verified Cloud Run CORS.
 - Recorded the 0%-traffic yt-dlp canary results: EJS/PO attestation fixes the control format, but representative playlist tracks remain blocked by Cloud Run egress reputation.
+- Updated the container to stable `2026.07.04`; canary `radio-ai-backend-00009-por` confirmed that the version upgrade alone does not clear Cloud Run's YouTube challenge.
 - Added a frontend-only `vercel.json` so the backend workspace is never deployed as a Vercel service.
 
   Still required:

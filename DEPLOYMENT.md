@@ -34,7 +34,7 @@ at `services/backend` is not a Vercel service.
 
 The current production revision is a CORS-only clone of the previous production image
 (`radio-ai-backend-00003-kvf`); only `ALLOWED_ORIGINS` changed. The newer yt-dlp image is
-revision `radio-ai-backend-00006-gap`, tagged `pot-canary`, and remains at 0% traffic because
+revision `radio-ai-backend-00009-por`, tagged `pot-canary`, and remains at 0% traffic because
 representative playlist playback still hits YouTube's Cloud Run egress challenge. GitHub
 backend deployment remains manual-only until Workload Identity Federation is configured.
 Never put Android enrollment credentials, API keys, signing secrets, or service-account keys
@@ -241,10 +241,10 @@ or add account credentials as an automatic fallback.
 
 ### Verified Cloud Run limitation (2026-08-05)
 
-Revision `radio-ai-backend-00006-gap` passed health/readiness and returned a valid
+Revision `radio-ai-backend-00009-por` (commit `06ddd57`, Cloud Build `a5669c18-312f-4725-9a23-13fa082d05e3`) passed health/readiness and returned a valid
 `206 audio/mp4` range for the control video `dQw4w9WgXcQ`. Multiple representative tracks
 from the seeded playlist still returned structured `YOUTUBE_CHALLENGE` responses with both
-`mweb` and `android_vr`. The identical image resolved those tracks from a Cloud Build worker,
+`mweb` and `android_vr`. Updating from `2026.03.17` to current stable `2026.07.04` did not change this result. The earlier image resolved those tracks from a Cloud Build worker,
 which isolates the remaining failure to Cloud Run egress reputation. Do not promote this
 candidate as a complete YouTube fix. A clean self-hosted/VPS network or a carefully evaluated
 outbound proxy is still required for dependable YouTube playback.
@@ -313,6 +313,6 @@ Current reference points:
 
 - Web/CORS production: `radio-ai-backend-00007-vol`.
 - Previous backend image without the Vercel origin: `radio-ai-backend-00003-kvf`.
-- Unpromoted yt-dlp candidate: `radio-ai-backend-00006-gap` (`pot-canary`, 0%).
+- Unpromoted yt-dlp candidate: `radio-ai-backend-00009-por` (`pot-canary`, 0%).
 
 For Vercel, promote the last known-good deployment from the dashboard or redeploy its commit. Backend and web rollbacks are independent; if a contract change requires both, roll the web back first, then Cloud Run. Rolling back to `00003-kvf` also removes the production Vercel origin and will break browser CORS.
