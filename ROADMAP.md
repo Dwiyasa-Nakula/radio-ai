@@ -11,7 +11,7 @@ Items are ordered by recommended priority.
 - [ ] Exercise connectivity loss during every show segment, stale weather/news fallback, cache eviction, next-cycle prefetch, and automatic reconnection on real hardware.
 - [ ] Configure GitHub Workload Identity Federation with separate deployer and runtime identities, add the three documented repository secrets, test manual dispatch, and only then consider enabling deploy-on-push.
 - [x] Deploy the root Next.js web product to Vercel, configure the matching backend session secret and exact Cloud Run CORS origin, and verify the page, session exchange, and authenticated local media path.
-- [ ] Select and validate a reliable non-Cloud-Run YouTube egress strategy before promoting `radio-ai-backend-00009-por`; representative seeded-playlist tracks still trigger `YOUTUBE_CHALLENGE` from Cloud Run.
+- [ ] Select and validate a reliable non-Cloud-Run YouTube egress strategy; stable yt-dlp plus both forced and default clients still trigger `YOUTUBE_CHALLENGE` for representative seeded-playlist tracks from Cloud Run. Use only a reputable authenticated proxy or a clean worker/VPS egress, with secrets and a 0%-traffic canary.
 - [ ] Add Google Cloud budget alerts, Cloud Run error/latency alerts, Secret Manager rotation reminders, and an Artifact Registry retention policy.
 - [ ] Resolve Gradle deprecation warnings before upgrading to Gradle 10; keep Java 17+ and Android SDK discovery documented for clean machines.
 - [ ] Reconcile GitHub's post-push Dependabot alerts after its dependency graph refresh. Local `npm audit` reports zero vulnerabilities; review any remaining alerts for Gradle or stale lockfile data individually.

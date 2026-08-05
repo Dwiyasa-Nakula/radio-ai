@@ -13,6 +13,8 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Deployed the repository-root Next.js frontend to `https://radio-ai-three.vercel.app` with production session secrets and verified Cloud Run CORS.
 - Recorded the 0%-traffic yt-dlp canary results: EJS/PO attestation fixes the control format, but representative playlist tracks remain blocked by Cloud Run egress reputation.
 - Updated the container to stable `2026.07.04`; canary `radio-ai-backend-00009-por` confirmed that the version upgrade alone does not clear Cloud Run's YouTube challenge.
+- Tested yt-dlp's current default client selection on zero-traffic canary `radio-ai-backend-00010-los`; the control streamed, but a seeded-playlist track remained challenged, so the ineffective source change was reverted.
+- Documented why anonymous public proxies are unsuitable and the requirements for a secret-backed authenticated proxy canary.
 - Added a frontend-only `vercel.json` so the backend workspace is never deployed as a Vercel service.
 
   Still required:

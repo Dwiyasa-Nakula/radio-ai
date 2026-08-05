@@ -33,8 +33,8 @@ at `services/backend` is not a Vercel service.
 | Allowed browser origin | `https://radio-ai-three.vercel.app` |
 
 The current production revision is a CORS-only clone of the previous production image
-(`radio-ai-backend-00003-kvf`); only `ALLOWED_ORIGINS` changed. The newer yt-dlp image is
-revision `radio-ai-backend-00009-por`, tagged `pot-canary`, and remains at 0% traffic because
+(`radio-ai-backend-00003-kvf`); only `ALLOWED_ORIGINS` changed. The latest diagnostic image is
+revision `radio-ai-backend-00010-los`, tagged `pot-canary`, and remains at 0% traffic because
 representative playlist playback still hits YouTube's Cloud Run egress challenge. GitHub
 backend deployment remains manual-only until Workload Identity Federation is configured.
 Never put Android enrollment credentials, API keys, signing secrets, or service-account keys
@@ -239,7 +239,7 @@ local music, live radio, and host segments. A PO token reduces bot challenges bu
 cannot guarantee that YouTube will accept Cloud Run egress. Do not commit cookies
 or add account credentials as an automatic fallback.
 
-### Verified Cloud Run limitation (2026-08-05)
+### Verified Cloud Run limitation (2026-08-06)
 
 Revision `radio-ai-backend-00009-por` (commit `06ddd57`, Cloud Build `a5669c18-312f-4725-9a23-13fa082d05e3`) passed health/readiness and returned a valid
 `206 audio/mp4` range for the control video `dQw4w9WgXcQ`. Multiple representative tracks
@@ -248,6 +248,18 @@ from the seeded playlist still returned structured `YOUTUBE_CHALLENGE` responses
 which isolates the remaining failure to Cloud Run egress reputation. Do not promote this
 candidate as a complete YouTube fix. A clean self-hosted/VPS network or a carefully evaluated
 outbound proxy is still required for dependable YouTube playback.
+
+A separate 0%-traffic diagnostic revision, `radio-ai-backend-00010-los` (commit
+`1950c82`, Cloud Build `812d85c4-ab1a-4cfd-a427-913ba40952b5`), replaced the forced clients
+with yt-dlp's current default client selection. The same control returned `206 audio/mp4`, while
+seeded-playlist video `wPnhaGWBnys` still returned `YOUTUBE_CHALLENGE`. No PO-token/provider
+errors appeared in the revision logs. The default-client source experiment was therefore
+reverted; changing clients is not a fix for the challenged Cloud Run egress IP.
+
+Do not use anonymous public proxy lists in production. Their operators can observe traffic,
+their addresses are commonly abused or blocked, and availability is not dependable. If a proxy
+is evaluated, use a reputable authenticated provider, store its URL in Secret Manager, restrict
+it to the YouTube extractor, and validate it first on a 0%-traffic revision.
 
 To verify the image before promotion, confirm the provider and audio range path:
 
@@ -313,6 +325,7 @@ Current reference points:
 
 - Web/CORS production: `radio-ai-backend-00007-vol`.
 - Previous backend image without the Vercel origin: `radio-ai-backend-00003-kvf`.
-- Unpromoted yt-dlp candidate: `radio-ai-backend-00009-por` (`pot-canary`, 0%).
+- Latest diagnostic revision: `radio-ai-backend-00010-los` (`pot-canary`, 0%); its
+  default-client source experiment was reverted after failing the representative-track probe.
 
 For Vercel, promote the last known-good deployment from the dashboard or redeploy its commit. Backend and web rollbacks are independent; if a contract change requires both, roll the web back first, then Cloud Run. Rolling back to `00003-kvf` also removes the production Vercel origin and will break browser CORS.
