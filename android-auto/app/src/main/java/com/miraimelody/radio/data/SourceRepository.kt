@@ -201,23 +201,18 @@ class SourceRepository(
 
     private suspend fun indexDocumentSource(source: SourceEntity, root: DocumentFile) {
         val role = source.type.role()
-        val media = mutableListOf<DocumentFile>()
-        collectMedia(root, media, 0)
+        val media = collectMediaRecursively(
+            root = root,
+            children = { it.listFiles().toList() },
+            isDirectory = { it.isDirectory },
+            isPlayable = { it.isFile && it.name.orEmpty().isPlayableMedia() },
+            sortKey = { it.name.orEmpty().lowercase(Locale.ROOT) },
+        )
         val tracks = media.mapIndexedNotNull { index, file ->
             runCatching { extractTrack(source, file.uri, index, role) }.getOrNull()
         }
         database.tracks().replaceSource(source.id, tracks)
         database.sources().markRefreshed(source.id, System.currentTimeMillis())
-    }
-
-    private fun collectMedia(folder: DocumentFile, output: MutableList<DocumentFile>, depth: Int) {
-        if (depth > 8 || output.size >= 2_000) return
-        folder.listFiles().sortedBy { it.name?.lowercase(Locale.ROOT) }.forEach { child ->
-            when {
-                child.isDirectory -> collectMedia(child, output, depth + 1)
-                child.isFile && child.name.orEmpty().isPlayableMedia() -> output += child
-            }
-        }
     }
 
     private fun extractTrack(

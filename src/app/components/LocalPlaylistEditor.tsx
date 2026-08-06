@@ -2,9 +2,10 @@
 
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { LocalQueueMode, SavedLocalPlaylist, Track } from '../lib/types';
+import type { LocalQueueMode, SavedLocalPlaylist } from '../lib/types';
 import { useLocalLibrary } from '../lib/localLibraryClient';
 import { LOCAL_FAVORITE_LIMIT, sanitizeLocalFavoriteTrackIds } from '../lib/localQueue';
+import { localTrackSearchText } from '../lib/localTrackSearch';
 
 interface LocalPlaylistEditorProps {
   playlist: SavedLocalPlaylist;
@@ -16,13 +17,6 @@ function formatTrackDuration(seconds: number | undefined): string {
   const minutes = Math.floor(seconds / 60);
   const remaining = Math.floor(seconds % 60);
   return `${minutes}:${remaining.toString().padStart(2, '0')}`;
-}
-
-function trackSearchText(track: Track): string {
-  return [track.title, track.artist, track.album, track.year, ...(track.genre ?? [])]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
 }
 
 const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onSave }) => {
@@ -81,7 +75,7 @@ const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onS
     [orderedIds, trackById]
   );
   const searchableTracks = useMemo(
-    () => tracks.map((track) => ({ track, searchText: trackSearchText(track) })),
+    () => tracks.map((track) => ({ track, searchText: localTrackSearchText(track) })),
     [tracks]
   );
   const filteredTracks = useMemo(() => {
@@ -204,7 +198,7 @@ const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onS
             Pick the songs included in this local playlist, then play them randomly or in the saved order.
           </p>
           <p className="text-[11px] text-cyan-200/75 mt-1">
-            Local scans keep running in the background and are reused until you choose another folder or rescan manually.
+            Scans every supported audio file in the selected root and all nested folders. Results are reused until you choose another folder or rescan manually.
           </p>
         </div>
         <div className="text-xs text-gray-300 sm:text-right shrink-0 space-y-1">
@@ -300,7 +294,7 @@ const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onS
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search title, artist, album, genre..."
+              placeholder="Search title, artist, album, folder, filename..."
               className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none focus:border-cyan-300/60"
             />
             <button

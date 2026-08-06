@@ -868,7 +868,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-950/20 p-4">
                   <h4 className="text-sm font-semibold text-cyan-100">Browser folder access</h4>
                   <p className="mt-1 text-xs text-gray-400">
-                    Recommended for Vercel. Scans nested folders locally and stores a read-only handle in this browser; no audio, paths, or artwork are uploaded.
+                    Recommended for Vercel. Scans every MP3 and supported audio file under the selected root, including all nested folders, and stores a read-only handle in this browser; no audio, paths, or artwork are uploaded.
                   </p>
                   {supportsPersistentDirectoryPicker() ? (
                     <button

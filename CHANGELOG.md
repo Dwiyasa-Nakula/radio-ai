@@ -18,6 +18,7 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Added a frontend-only `vercel.json` so the backend workspace is never deployed as a Vercel service.
 - Added optional site-wide HTTP Basic authentication so unauthenticated visitors cannot mint backend sessions or consume TTS.
 - Increased local favorite selection from three to ten in the web and native Android queues.
+- Made local root-folder discovery fully recursive on Android without the former depth/2,000-file caps, and added web playlist search by nested folder and filename.
 
   Still required:
 

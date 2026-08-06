@@ -207,7 +207,7 @@ Open the **⚙ Settings** drawer (top-right of the page) to configure:
 
 - **Broadcast**: Announcer language (Japanese/English), playback order (Full Radio Show vs. Classic Schedule), DJ memory, news focus, weather, traffic updates, ad frequency, and ReplayGain loudness normalization.
 - **Sources**: Manage saved YouTube playlists or local folders, add new sources, or switch active channels.
-- **Local Queue**: Filter, reorder, and select included tracks for local filesystem playlists. Star up to ten favorites to give each one a 10% chance of one extra play per loop in Random mode.
+- **Local Queue**: Recursively discovers supported audio beneath the selected root folder; filter by tags, subfolder, or filename, reorder tracks, and star up to ten favorites for a 10% extra-play chance per loop in Random mode.
 - **International Radio**: Browse live streams across Japan, China, and South Korea.
 
 ### 📢 Advertisements & Sponsor Credits
