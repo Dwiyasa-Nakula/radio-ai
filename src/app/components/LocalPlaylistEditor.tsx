@@ -290,7 +290,7 @@ const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onS
               </span>
             </div>
             <p className="mt-1 text-xs text-gray-400">
-              Star one to three selected songs. In Random mode, each favorite has a 10% chance of
+              Star up to ten selected songs. In Random mode, each favorite has a 10% chance of
               one extra play per complete loop. Ordered mode keeps the exact queue and ignores this boost.
             </p>
           </div>
@@ -418,7 +418,7 @@ const LocalPlaylistEditor: React.FC<LocalPlaylistEditorProps> = ({ playlist, onS
                           disabled={favoriteLimitReached}
                           aria-pressed={isFavorite}
                           aria-label={`${isFavorite ? 'Remove' : 'Add'} ${track.title} ${isFavorite ? 'from' : 'to'} favorites`}
-                          title={favoriteLimitReached ? 'You can select up to three favorites' : undefined}
+                          title={favoriteLimitReached ? 'You can select up to ten favorites' : undefined}
                           className={`rounded-md px-2 py-1 text-sm ${
                             isFavorite
                               ? 'bg-amber-400/25 text-amber-200 hover:bg-amber-400/35'

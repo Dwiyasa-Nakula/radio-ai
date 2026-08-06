@@ -15,7 +15,7 @@ website URL, browser storage, cookies, or Next.js session dependency.
 - Room source/queue persistence, DataStore settings, and an AES-GCM enrollment
   credential protected by Android Keystore.
 - Full Show, independently scheduled Classic mode, and Music Only.
-- Ordered/random queues, up to three favorites, and approximately 10% extra
+- Ordered/random queues, up to ten favorites, and approximately 10% extra
   favorite rotation.
 - Japanese/English announcers and High/Balanced/Data Saver codec/bitrate choices.
 - Secondary local BGM player with 10% default volume, fade-in, speech lead-in,

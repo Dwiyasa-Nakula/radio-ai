@@ -1,6 +1,6 @@
 import type { Track } from './types';
 
-export const LOCAL_FAVORITE_LIMIT = 3;
+export const LOCAL_FAVORITE_LIMIT = 10;
 export const LOCAL_FAVORITE_BOOST_CHANCE = 0.1;
 
 export function sanitizeLocalFavoriteTrackIds(

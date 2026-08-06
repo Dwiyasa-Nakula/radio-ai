@@ -14,6 +14,8 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
+const val LOCAL_FAVORITE_LIMIT = 10
+
 enum class SourceType {
     YOUTUBE_PLAYLIST,
     MUSIC_FOLDER,
@@ -135,7 +137,7 @@ abstract class TrackDao {
             closeFavoriteGap(track.favoriteRank)
             return false
         }
-        if (favoriteCount() >= 3) return false
+        if (favoriteCount() >= LOCAL_FAVORITE_LIMIT) return false
         setFavoriteRank(track.mediaId, (maxFavoriteRank() ?: 0) + 1)
         return true
     }

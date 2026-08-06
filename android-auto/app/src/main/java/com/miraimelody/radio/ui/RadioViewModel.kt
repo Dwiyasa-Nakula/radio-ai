@@ -144,7 +144,7 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
         val enabled = app.sources.toggleFavorite(track)
         if (!enabled && track.favoriteRank == 0) {
             withContext(Dispatchers.Main) {
-                mutableMessage.value = "Only three favorites can be active"
+                mutableMessage.value = "Only ten favorites can be active"
             }
         }
     }

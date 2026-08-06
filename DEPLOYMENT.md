@@ -182,8 +182,16 @@ Configure these server-side variables for **Production**:
 | --- | --- |
 | `BACKEND_URL` | `https://radio-ai-backend-dktu4p5zqq-as.a.run.app` (no trailing slash) |
 | `BACKEND_SESSION_SECRET` | Sensitive; exactly the same 32+ character value as Google Secret Manager |
+| `WEB_ACCESS_USERNAME` | Personal HTTP Basic username; defaults to `radio` |
+| `WEB_ACCESS_PASSWORD` | Sensitive; long unique password that gates the website and session-minting API |
 
 Do not use a `NEXT_PUBLIC_` prefix. Provider credentials belong only in Cloud Run.
+`WEB_ACCESS_PASSWORD` enables HTTP Basic authentication for the entire personal web app,
+including `/api/backend/session`; without a backend session, callers cannot invoke TTS. Use a
+long unique password over the production HTTPS URL. The browser remembers it for the browsing
+session. Removing the variable disables this gate, which is convenient for local development
+but is not recommended for the public Vercel deployment. This access password is independent
+from `BACKEND_SESSION_SECRET` and must never reuse it.
 `LOCAL_MUSIC_DIR` is meaningful only for local development/self-hosting and does not let a
 Vercel Function read a user's computer. Environment-variable changes require a new Vercel
 deployment.
@@ -260,6 +268,12 @@ Do not use anonymous public proxy lists in production. Their operators can obser
 their addresses are commonly abused or blocked, and availability is not dependable. If a proxy
 is evaluated, use a reputable authenticated provider, store its URL in Secret Manager, restrict
 it to the YouTube extractor, and validate it first on a 0%-traffic revision.
+
+A shared datacenter proxy is unlikely to improve on Cloud Run's data-center reputation. If Evomi
+is evaluated, prefer an authenticated residential product and begin with one sticky session for
+one canary instance. Each uncached video/quality currently makes one `mweb` extraction attempt
+and at most one `android_vr` fallback; successful direct URLs remain cached until shortly before
+upstream expiry. Monitor bandwidth and request counts in the provider dashboard before scaling.
 
 To verify the image before promotion, confirm the provider and audio range path:
 

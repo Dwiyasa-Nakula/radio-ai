@@ -145,6 +145,10 @@ live radio, TTS, jingles, and ads do not depend on that YouTube extraction path.
    YOUTUBE_API_KEY=your_youtube_data_api_v3_key_here
    LOCAL_MUSIC_DIR=D:\Music
 
+   # Personal web access (server-side only; optional locally)
+   WEB_ACCESS_USERNAME=radio
+   WEB_ACCESS_PASSWORD=replace-with-a-long-unique-password
+
    # Production web -> Cloud Run connection
    BACKEND_URL=https://radio-ai-backend-dktu4p5zqq-as.a.run.app
    BACKEND_SESSION_SECRET=replace-with-at-least-32-random-characters
@@ -203,7 +207,7 @@ Open the **⚙ Settings** drawer (top-right of the page) to configure:
 
 - **Broadcast**: Announcer language (Japanese/English), playback order (Full Radio Show vs. Classic Schedule), DJ memory, news focus, weather, traffic updates, ad frequency, and ReplayGain loudness normalization.
 - **Sources**: Manage saved YouTube playlists or local folders, add new sources, or switch active channels.
-- **Local Queue**: Filter, reorder, and select included tracks for local filesystem playlists. Star up to three favorites to give each one a 10% chance of one extra play per loop in Random mode.
+- **Local Queue**: Filter, reorder, and select included tracks for local filesystem playlists. Star up to ten favorites to give each one a 10% chance of one extra play per loop in Random mode.
 - **International Radio**: Browse live streams across Japan, China, and South Korea.
 
 ### 📢 Advertisements & Sponsor Credits

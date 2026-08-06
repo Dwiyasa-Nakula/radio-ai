@@ -16,6 +16,8 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Tested yt-dlp's current default client selection on zero-traffic canary `radio-ai-backend-00010-los`; the control streamed, but a seeded-playlist track remained challenged, so the ineffective source change was reverted.
 - Documented why anonymous public proxies are unsuitable and the requirements for a secret-backed authenticated proxy canary.
 - Added a frontend-only `vercel.json` so the backend workspace is never deployed as a Vercel service.
+- Added optional site-wide HTTP Basic authentication so unauthenticated visitors cannot mint backend sessions or consume TTS.
+- Increased local favorite selection from three to ten in the web and native Android queues.
 
   Still required:
 

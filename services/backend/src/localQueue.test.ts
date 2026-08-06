@@ -18,16 +18,16 @@ function track(id: string): Track {
   };
 }
 
-test('local favorite IDs are unique, eligible, and capped at three', () => {
-  const eligible = new Set(['local:a', 'local:b', 'local:c', 'local:d']);
+test('local favorite IDs are unique, eligible, and capped at ten', () => {
+  const eligible = new Set(Array.from({ length: 12 }, (_, index) => `local:${index + 1}`));
   assert.deepEqual(
     sanitizeLocalFavoriteTrackIds(
-      ['local:a', 'local:a', 'youtube:x', 'local:b', 'local:missing', 'local:c', 'local:d'],
+      ['local:1', 'local:1', 'youtube:x', ...Array.from({ length: 11 }, (_, index) => `local:${index + 2}`)],
       eligible
     ),
-    ['local:a', 'local:b', 'local:c']
+    Array.from({ length: 10 }, (_, index) => `local:${index + 1}`)
   );
-  assert.equal(LOCAL_FAVORITE_LIMIT, 3);
+  assert.equal(LOCAL_FAVORITE_LIMIT, 10);
 });
 
 test('a favorite can receive one extra non-adjacent play in a random loop', () => {

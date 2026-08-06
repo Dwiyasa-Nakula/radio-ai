@@ -1,6 +1,7 @@
 package com.miraimelody.radio.playback
 
 import com.miraimelody.radio.data.BroadcastMode
+import com.miraimelody.radio.data.LOCAL_FAVORITE_LIMIT
 import com.miraimelody.radio.data.QueueMode
 import com.miraimelody.radio.data.RadioSettings
 import kotlin.random.Random
@@ -60,7 +61,7 @@ object QueuePlanner {
             QueueMode.ORDERED -> items
             QueueMode.RANDOM -> items.shuffled(random)
         }
-        val favorites = items.filter { favoriteRank(it) in 1..3 }
+        val favorites = items.filter { favoriteRank(it) in 1..LOCAL_FAVORITE_LIMIT }
             .sortedBy(favoriteRank)
         if (favorites.isEmpty()) return base
         val extraCount = when {

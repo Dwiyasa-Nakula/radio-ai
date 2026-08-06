@@ -29,7 +29,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
             ROOT -> listOf(
                 browsable(MUSIC, "Music queue", "Local folders and YouTube playlists"),
                 browsable(RADIO, "Live radio", "Japan, China, and South Korea"),
-                browsable(FAVORITES, "Favorites", "Up to three weighted favorites"),
+                browsable(FAVORITES, "Favorites", "Up to ten weighted favorites"),
             )
             MUSIC -> app.database.tracks().getByRoleBlocking(MediaRole.MUSIC).map(::playable)
             RADIO -> app.database.tracks().getByRoleBlocking(MediaRole.RADIO).map(::playable)

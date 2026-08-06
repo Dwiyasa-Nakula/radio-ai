@@ -95,6 +95,14 @@ class QueueEngineTest {
     }
 
     @Test
+    fun tenthFavoriteParticipatesInWeighting() {
+        val input = (1..10).toList()
+        val planned = QueuePlanner.plan(input, QueueMode.ORDERED, { if (it == 10) 10 else 0 }, Random(7))
+        assertEquals(11, planned.size)
+        assertEquals(2, planned.count { it == 10 })
+    }
+
+    @Test
     fun shuffleBagsExhaustTheirOwnItemsBeforeRepeating() {
         val introBag = ShuffleBag<String>(Random(1))
         val outroBag = ShuffleBag<String>(Random(2))
