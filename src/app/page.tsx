@@ -27,7 +27,7 @@ import {
   savePlaylists,
 } from "./lib/playlists";
 import { loadLocalLibrary } from "./lib/localLibraryClient";
-import { createLocalTrackObjectUrl } from "./lib/browserLocalLibrary";
+import { clearLocalDirectoryFiles, createLocalTrackObjectUrl } from "./lib/browserLocalLibrary";
 import { backendFetch, backendMediaUrl } from "./lib/backendClient";
 import { deleteDirectoryHandle, deletePlaylistQueue } from "./lib/browserStorage";
 import { applyLocalFavoriteBoost } from "./lib/localQueue";
@@ -926,6 +926,7 @@ export default function Home() {
         const removed = prev.find((playlist) => playlist.id === id);
         void deletePlaylistQueue(id).catch(() => undefined);
         if (removed?.type === 'local' && removed.directoryHandleId) {
+          clearLocalDirectoryFiles(removed.directoryHandleId);
           void deleteDirectoryHandle(removed.directoryHandleId).catch(() => undefined);
         }
         const next = prev.filter((p) => p.id !== id);

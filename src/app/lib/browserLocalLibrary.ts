@@ -19,6 +19,12 @@ interface WorkerResult {
 }
 
 const sessionFiles = new Map<string, Map<string, File>>();
+const resolvedFiles = new Map<string, Map<string, File>>();
+
+export function clearLocalDirectoryFiles(directoryId: string): void {
+  sessionFiles.delete(directoryId);
+  resolvedFiles.delete(directoryId);
+}
 
 export function supportsPersistentDirectoryPicker(): boolean {
   return typeof window !== 'undefined' && typeof (window as DirectoryPickerWindow).showDirectoryPicker === 'function';
@@ -125,10 +131,17 @@ export async function createLocalTrackObjectUrl(track: Track): Promise<string> {
   const sessionFile = sessionFiles.get(directoryId)?.get(relativePath);
   if (sessionFile) return URL.createObjectURL(sessionFile);
 
+  const cachedFile = resolvedFiles.get(directoryId)?.get(relativePath);
+  if (cachedFile) return URL.createObjectURL(cachedFile);
+
   const handle = await getDirectoryHandle(directoryId);
   if (!handle) throw new Error('The local folder must be reconnected before playback.');
   if (!(await ensureDirectoryReadPermission(handle, false))) {
     throw new Error('Folder permission expired. Reconnect it in Settings.');
   }
-  return URL.createObjectURL(await resolveFileFromHandle(handle, relativePath));
+  const file = await resolveFileFromHandle(handle, relativePath);
+  const files = resolvedFiles.get(directoryId) ?? new Map<string, File>();
+  files.set(relativePath, file);
+  resolvedFiles.set(directoryId, files);
+  return URL.createObjectURL(file);
 }
