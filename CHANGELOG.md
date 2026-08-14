@@ -19,6 +19,7 @@ All notable changes to **mirAI melody 73.9 FM** will be documented in this file.
 - Added optional site-wide HTTP Basic authentication so unauthenticated visitors cannot mint backend sessions or consume TTS.
 - Increased local favorite selection from three to ten in the web and native Android queues.
 - Made local root-folder discovery fully recursive on Android without the former depth/2,000-file caps, and added web playlist search by nested folder and filename.
+- Kept browser local playback working after mobile directory permission drops by returning worker-collected `File` objects from the initial scan and caching them for the page session.
 
   Still required:
 

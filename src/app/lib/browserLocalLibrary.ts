@@ -11,11 +11,22 @@ interface DirectoryPickerWindow extends Window {
   showDirectoryPicker?: (options?: { id?: string; mode?: 'read' }) => Promise<FileSystemDirectoryHandle>;
 }
 
+interface WorkerFile {
+  relativePath: string;
+  file: File;
+}
+
 interface WorkerResult {
   type: 'complete' | 'error' | 'progress';
   requestId: string;
   tracks?: Track[];
+  files?: WorkerFile[];
   error?: string;
+}
+
+interface WorkerScanResult {
+  tracks: Track[];
+  files: WorkerFile[];
 }
 
 const sessionFiles = new Map<string, Map<string, File>>();
@@ -41,7 +52,7 @@ export async function pickAndStoreDirectory(directoryId: string): Promise<FileSy
   return handle;
 }
 
-function runWorker(payload: Record<string, unknown>): Promise<Track[]> {
+function runWorker(payload: Record<string, unknown>): Promise<WorkerScanResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../workers/localMetadata.worker.ts', import.meta.url), {
       type: 'module',
@@ -58,7 +69,9 @@ function runWorker(payload: Record<string, unknown>): Promise<Track[]> {
       if (event.data.type === 'progress') return;
       window.clearTimeout(timeout);
       worker.terminate();
-      if (event.data.type === 'complete' && event.data.tracks) resolve(event.data.tracks);
+      if (event.data.type === 'complete' && event.data.tracks) {
+        resolve({ tracks: event.data.tracks, files: event.data.files ?? [] });
+      }
       else reject(new Error(event.data.error ?? 'Local folder scan failed'));
     };
     worker.onerror = (event) => {
@@ -80,18 +93,24 @@ export async function scanBrowserPlaylist(
     if (!files) {
       throw new Error('This session-only folder must be selected again after a refresh.');
     }
-    return runWorker({
+    const result = await runWorker({
       type: 'scan-files',
       directoryId,
       files: Array.from(files, ([relativePath, file]) => ({ relativePath, file })),
     });
+    return result.tracks;
   }
 
   const handle = await getDirectoryHandle(directoryId);
   if (!handle) throw new Error('Saved folder handle is unavailable. Reconnect the folder in Settings.');
   const allowed = await ensureDirectoryReadPermission(handle, options.requestPermission === true);
   if (!allowed) throw new Error('Folder permission expired. Use ?Reconnect & rescan? in Settings.');
-  return runWorker({ type: 'scan-handle', directoryId, handle });
+  const result = await runWorker({ type: 'scan-handle', directoryId, handle });
+  resolvedFiles.set(
+    directoryId,
+    new Map(result.files.map(({ relativePath, file }) => [relativePath, file]))
+  );
+  return result.tracks;
 }
 
 export async function registerSessionDirectoryFiles(
@@ -104,11 +123,12 @@ export async function registerSessionDirectoryFiles(
     byPath.set(relativePath, file);
   }
   sessionFiles.set(directoryId, byPath);
-  return runWorker({
+  const result = await runWorker({
     type: 'scan-files',
     directoryId,
     files: Array.from(byPath, ([relativePath, file]) => ({ relativePath, file })),
   });
+  return result.tracks;
 }
 
 async function resolveFileFromHandle(

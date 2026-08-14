@@ -214,7 +214,12 @@ self.onmessage = async (event: MessageEvent<ScanMessage>) => {
       return track;
     });
     tracks.sort((left, right) => left.relativePath!.localeCompare(right.relativePath!, undefined, { numeric: true }));
-    self.postMessage({ type: 'complete', requestId: message.requestId, tracks });
+    self.postMessage({
+      type: 'complete',
+      requestId: message.requestId,
+      tracks,
+      files: message.type === 'scan-handle' ? candidates : undefined,
+    });
   } catch (error) {
     self.postMessage({
       type: 'error',
