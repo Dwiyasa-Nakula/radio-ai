@@ -183,11 +183,12 @@ Configure these server-side variables for **Production**:
 | --- | --- |
 | `BACKEND_URL` | `https://radio-ai-backend-dktu4p5zqq-as.a.run.app` (no trailing slash) |
 | `BACKEND_SESSION_SECRET` | Sensitive; exactly the same 32+ character value as Google Secret Manager |
+| `ENABLE_WEB_ACCESS_AUTH` | Set to `true` to enable the optional personal HTTP Basic gate; defaults to disabled |
 | `WEB_ACCESS_USERNAME` | Personal HTTP Basic username; defaults to `radio` |
-| `WEB_ACCESS_PASSWORD` | Sensitive; long unique password that gates the website and session-minting API |
+| `WEB_ACCESS_PASSWORD` | Sensitive; long unique password used when the gate is enabled |
 
 Do not use a `NEXT_PUBLIC_` prefix. Provider credentials belong only in Cloud Run.
-`WEB_ACCESS_PASSWORD` enables HTTP Basic authentication for the entire personal web app,
+`ENABLE_WEB_ACCESS_AUTH=true` enables HTTP Basic authentication for the entire personal web app,
 including `/api/backend/session`; without a backend session, callers cannot invoke TTS. Use a
 long unique password over the production HTTPS URL. The browser remembers it for the browsing
 session. Removing the variable disables this gate, which is convenient for local development
@@ -210,8 +211,10 @@ gcloud run deploy radio-ai-backend `
 
 Test the tagged revision's preflight and an authenticated `/v1` request before shifting
 traffic. Preview deployments require explicit preview origins; they are not currently
-allowed. Browser directory permission may require renewal after a browser restart even
-though handles and scan metadata are stored in IndexedDB.
+allowed. A successful browser-folder scan retains the worker-collected `File` objects in memory,
+so playback and later loops in that page session do not re-query directory permission. A reload or
+browser restart still clears that in-memory cache and may require permission renewal even though the
+directory handle and scan metadata are stored in IndexedDB.
 
 ## Playback and privacy checks
 

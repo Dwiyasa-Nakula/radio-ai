@@ -17,7 +17,7 @@ A full-featured AI radio station web application that streams from YouTube playl
 
 ### 📁 Local Library & Private Directory Storage
 
-- **Browser File System Access & IndexedDB**: Persistent, read-only local directory handle access with Web Worker recursive folder walking, ID3/Vorbis/MP4 metadata parsing, and cover-art caching.
+- **Browser File System Access & IndexedDB**: Persistent, read-only local directory handle access with Web Worker recursive folder walking, ID3/Vorbis/MP4 metadata parsing, and cover-art caching. Each successful handle scan also retains lightweight `File` references for the current page session, so mobile playback loops do not depend on directory permission remaining granted after the tab is backgrounded.
 - **Virtualized Library & Custom Queues**: Complete `@tanstack/react-virtual` list rendering for handling unlimited track lists without UI performance bottlenecks.
 - **Local Directory Playlist Management**: Custom per-device song selection, track ordering, and persistent reshuffling.
 
@@ -146,6 +146,7 @@ live radio, TTS, jingles, and ads do not depend on that YouTube extraction path.
    LOCAL_MUSIC_DIR=D:\Music
 
    # Personal web access (server-side only; optional locally)
+   ENABLE_WEB_ACCESS_AUTH=false
    WEB_ACCESS_USERNAME=radio
    WEB_ACCESS_PASSWORD=replace-with-a-long-unique-password
 
