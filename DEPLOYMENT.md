@@ -365,3 +365,32 @@ Canary evidence:
 The BGM image was therefore **not promoted**. Production remains 100% on
 `radio-ai-backend-00017-xas`; `radio-ai-backend-00019-fah` remains at 0% for diagnosis.
 Do not shift traffic until representative playlist audio returns `206` on a fresh revision.
+
+### Bundled station-media canary (2026-08-15)
+
+Rewritten application HEAD `c90ec48afb38a9cdf823818f11d7c6efe50cb489` built successfully as
+Cloud Build `8fa60e8d-8d81-44d0-b722-25f08a7446d9` and deployed as zero-traffic revision
+`radio-ai-backend-00020-vam`. Its BGM and YouTube control range passed, but intro,
+outro, and ad endpoints returned `404` because the backend image contained only the
+tracked placeholder files under `public`; the real station media was packaged only in
+the Android assets.
+
+Commit `83a0baa410edea0cd1cef3a82a96e4e5d6ee3d68` seeds the backend image from the
+same committed Android manifest and media files. Cloud Build
+`6eac3f14-579e-4dab-b53a-e44d8ea30c15` produced the immutable image, deployed as
+zero-traffic revision `radio-ai-backend-00021-goq`, tagged `media-83a0baa`.
+
+Fixed-canary evidence:
+
+- `/health`: `200`; `/readyz`: `200` with the YouTube provider ready.
+- Unauthenticated `/v1/host/bgm`: `401`.
+- Authenticated 65,536-byte ranges: BGM `206 audio/mpeg`, intro jingle `206 video/mp4`,
+  outro jingle `206 video/mp4`, and ad `206 audio/mpeg`.
+- Ad description: `200` with a packaged local-file selection.
+- YouTube metadata control: `200`.
+- YouTube audio control `dQw4w9WgXcQ` and representative IDs `AXnqkVTFUqY` and
+  `QK8BUygFR1U`: `503 YOUTUBE_CHALLENGE`.
+
+The fixed media image was therefore **not promoted**. Production remains 100% on
+`radio-ai-backend-00017-xas`; revisions `00020-vam` and `00021-goq` remain at 0%.
+Promote only after fresh representative YouTube audio ranges return `206`.
