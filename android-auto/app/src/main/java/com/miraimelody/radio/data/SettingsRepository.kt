@@ -29,18 +29,25 @@ enum class AnnouncerLanguage { JAPANESE, ENGLISH }
 
 data class RadioSettings(
     val backendUrl: String = "",
+    val hostEnabled: Boolean = true,
+    val chatterEnabled: Boolean = true,
+    val researchedChatter: Boolean = true,
+    val newsFocus: String = "",
+    val adsEnabled: Boolean = false,
+    val morningPreroll: Boolean = true,
+    val noonPreroll: Boolean = true,
+    val djMemoryEnabled: Boolean = true,
+    val listenerInteractionEnabled: Boolean = true,
+    val audioNormalization: Boolean = true,
     val broadcastMode: BroadcastMode = BroadcastMode.FULL_SHOW,
     val queueMode: QueueMode = QueueMode.RANDOM,
     val quality: AudioQuality = AudioQuality.HIGH,
     val language: AnnouncerLanguage = AnnouncerLanguage.JAPANESE,
-    val introInterval: Int = 1,
-    val outroInterval: Int = 1,
-    val discussionInterval: Int = 1,
-    val weatherInterval: Int = 3,
-    val trafficInterval: Int = 3,
-    val newsInterval: Int = 3,
-    val adInterval: Int = 2,
-    val sponsorInterval: Int = 2,
+    val frequency: Int = 1,
+    val newsEvery: Int = 0,
+    val trafficEvery: Int = 10,
+    val jingleEvery: Int = 2,
+    val adEvery: Int = 1,
     val bgmVolume: Float = 0.10f,
     val bgmFadeInMs: Long = 1_200,
     val bgmLeadInMs: Long = 600,
@@ -53,18 +60,25 @@ data class RadioSettings(
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val backendUrl = stringPreferencesKey("backend-url")
+        val hostEnabled = booleanPreferencesKey("host-enabled")
+        val chatterEnabled = booleanPreferencesKey("chatter-enabled")
+        val researchedChatter = booleanPreferencesKey("researched-chatter")
+        val newsFocus = stringPreferencesKey("news-focus")
+        val adsEnabled = booleanPreferencesKey("ads-enabled")
+        val morningPreroll = booleanPreferencesKey("morning-preroll")
+        val noonPreroll = booleanPreferencesKey("noon-preroll")
+        val djMemoryEnabled = booleanPreferencesKey("dj-memory-enabled")
+        val listenerInteractionEnabled = booleanPreferencesKey("listener-interaction-enabled")
+        val audioNormalization = booleanPreferencesKey("audio-normalization")
         val broadcastMode = stringPreferencesKey("car-playback-mode")
         val queueMode = stringPreferencesKey("queue-mode")
         val quality = stringPreferencesKey("quality")
         val language = stringPreferencesKey("announcer-language")
-        val introInterval = intPreferencesKey("classic-intro-interval")
-        val outroInterval = intPreferencesKey("classic-outro-interval")
-        val discussionInterval = intPreferencesKey("classic-discussion-interval")
-        val weatherInterval = intPreferencesKey("classic-weather-interval")
-        val trafficInterval = intPreferencesKey("classic-traffic-interval")
-        val newsInterval = intPreferencesKey("classic-news-interval")
-        val adInterval = intPreferencesKey("classic-ad-interval")
-        val sponsorInterval = intPreferencesKey("classic-sponsor-interval")
+        val frequency = intPreferencesKey("host-frequency")
+        val newsEvery = intPreferencesKey("news-every")
+        val trafficEvery = intPreferencesKey("traffic-every")
+        val jingleEvery = intPreferencesKey("jingle-every")
+        val adEvery = intPreferencesKey("ad-every")
         val bgmVolume = floatPreferencesKey("bgm-volume")
         val bgmFadeInMs = longPreferencesKey("bgm-fade-in")
         val bgmLeadInMs = longPreferencesKey("bgm-lead-in")
@@ -87,6 +101,18 @@ class SettingsRepository(private val context: Context) {
         context.radioDataStore.edit { it[Keys.backendUrl] = normalizeBackendUrl(value, BuildConfig.DEBUG) }
     }
 
+    suspend fun updateHostEnabled(value: Boolean) = set(Keys.hostEnabled, value)
+    suspend fun updateChatterEnabled(value: Boolean) = set(Keys.chatterEnabled, value)
+    suspend fun updateResearchedChatter(value: Boolean) = set(Keys.researchedChatter, value)
+    suspend fun updateNewsFocus(value: String) = set(Keys.newsFocus, value.trim().take(160))
+    suspend fun updateAdsEnabled(value: Boolean) = set(Keys.adsEnabled, value)
+    suspend fun updateMorningPreroll(value: Boolean) = set(Keys.morningPreroll, value)
+    suspend fun updateNoonPreroll(value: Boolean) = set(Keys.noonPreroll, value)
+    suspend fun updateDjMemoryEnabled(value: Boolean) = set(Keys.djMemoryEnabled, value)
+    suspend fun updateListenerInteractionEnabled(value: Boolean) =
+        set(Keys.listenerInteractionEnabled, value)
+    suspend fun updateAudioNormalization(value: Boolean) = set(Keys.audioNormalization, value)
+
     suspend fun updateBroadcastMode(value: BroadcastMode) = set(Keys.broadcastMode, value.name)
     suspend fun updateQueueMode(value: QueueMode) = set(Keys.queueMode, value.name)
     suspend fun updateQuality(value: AudioQuality) = set(Keys.quality, value.name)
@@ -96,28 +122,25 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun updateClassicIntervals(
-        intro: Int,
-        outro: Int,
-        discussion: Int,
-        weather: Int,
-        traffic: Int,
-        news: Int,
-        ad: Int,
-        sponsor: Int,
+        frequency: Int,
+        newsEvery: Int,
+        trafficEvery: Int,
+        jingleEvery: Int,
+        adEvery: Int,
     ) {
         context.radioDataStore.edit {
-            it[Keys.introInterval] = interval(intro)
-            it[Keys.outroInterval] = interval(outro)
-            it[Keys.discussionInterval] = interval(discussion)
-            it[Keys.weatherInterval] = interval(weather)
-            it[Keys.trafficInterval] = interval(traffic)
-            it[Keys.newsInterval] = interval(news)
-            it[Keys.adInterval] = interval(ad)
-            it[Keys.sponsorInterval] = interval(sponsor)
+            it[Keys.frequency] = frequency.coerceIn(1, 5)
+            it[Keys.newsEvery] = interval(newsEvery)
+            it[Keys.trafficEvery] = interval(trafficEvery)
+            it[Keys.jingleEvery] = interval(jingleEvery)
+            it[Keys.adEvery] = adEvery.coerceIn(1, 20)
         }
     }
 
     private suspend fun set(key: Preferences.Key<String>, value: String) {
+        context.radioDataStore.edit { it[key] = value }
+    }
+    private suspend fun set(key: Preferences.Key<Boolean>, value: Boolean) {
         context.radioDataStore.edit { it[key] = value }
     }
 
@@ -126,18 +149,25 @@ class SettingsRepository(private val context: Context) {
             values[Keys.backendUrl] ?: BuildConfig.DEFAULT_BACKEND_URL,
             BuildConfig.DEBUG,
         ),
+        hostEnabled = values[Keys.hostEnabled] ?: true,
+        chatterEnabled = values[Keys.chatterEnabled] ?: true,
+        researchedChatter = values[Keys.researchedChatter] ?: true,
+        newsFocus = (values[Keys.newsFocus] ?: "").trim().take(160),
+        adsEnabled = values[Keys.adsEnabled] ?: false,
+        morningPreroll = values[Keys.morningPreroll] ?: true,
+        noonPreroll = values[Keys.noonPreroll] ?: true,
+        djMemoryEnabled = values[Keys.djMemoryEnabled] ?: true,
+        listenerInteractionEnabled = values[Keys.listenerInteractionEnabled] ?: true,
+        audioNormalization = values[Keys.audioNormalization] ?: true,
         broadcastMode = enumValue(values[Keys.broadcastMode], BroadcastMode.FULL_SHOW),
         queueMode = enumValue(values[Keys.queueMode], QueueMode.RANDOM),
         quality = enumValue(values[Keys.quality], AudioQuality.HIGH),
         language = enumValue(values[Keys.language], AnnouncerLanguage.JAPANESE),
-        introInterval = interval(values[Keys.introInterval] ?: 1),
-        outroInterval = interval(values[Keys.outroInterval] ?: 1),
-        discussionInterval = interval(values[Keys.discussionInterval] ?: 1),
-        weatherInterval = interval(values[Keys.weatherInterval] ?: 3),
-        trafficInterval = interval(values[Keys.trafficInterval] ?: 3),
-        newsInterval = interval(values[Keys.newsInterval] ?: 3),
-        adInterval = interval(values[Keys.adInterval] ?: 2),
-        sponsorInterval = interval(values[Keys.sponsorInterval] ?: 2),
+        frequency = (values[Keys.frequency] ?: 1).coerceIn(1, 5),
+        newsEvery = interval(values[Keys.newsEvery] ?: 0),
+        trafficEvery = interval(values[Keys.trafficEvery] ?: 10),
+        jingleEvery = interval(values[Keys.jingleEvery] ?: 2),
+        adEvery = (values[Keys.adEvery] ?: 1).coerceIn(1, 20),
         bgmVolume = (values[Keys.bgmVolume] ?: 0.10f).coerceIn(0f, 0.5f),
         bgmFadeInMs = values[Keys.bgmFadeInMs] ?: 1_200,
         bgmLeadInMs = values[Keys.bgmLeadInMs] ?: 600,
@@ -184,7 +214,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     companion object {
-        private fun interval(value: Int) = value.coerceIn(1, 99)
+        private fun interval(value: Int) = value.coerceIn(0, 99)
 
         private inline fun <reified T : Enum<T>> enumValue(raw: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == raw } ?: default

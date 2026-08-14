@@ -36,6 +36,7 @@ class MiraiApplication : Application() {
         cache = AudioFileCache(this) { settings.current().cacheLimitBytes }
         sources = SourceRepository(this, database, backend, cache)
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            sources.seedBundledMedia()
             sources.migrateLegacyPlaylist(settings.settings.first().legacyPlaylistId)
         }
     }

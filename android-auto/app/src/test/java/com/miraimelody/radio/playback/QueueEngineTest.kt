@@ -16,10 +16,48 @@ class QueueEngineTest {
     private val ads = listOf("Acme")
 
     @Test
+    fun `disabled host produces music only`() {
+        val result = ShowQueueBuilder<String>().build(
+            tracks = listOf("song"),
+            settings = RadioSettings(hostEnabled = false),
+            intros = listOf("intro"),
+            outros = listOf("outro"),
+            ads = listOf("ad"),
+        )
+
+        assertEquals(listOf(SegmentType.MUSIC), result.map { it.type })
+    }
+
+    @Test
+    fun `classic zero intervals disable optional segments`() {
+        val result = ShowQueueBuilder<String>().build(
+            tracks = listOf("song", "next"),
+            settings = RadioSettings(
+                broadcastMode = BroadcastMode.CLASSIC,
+                chatterEnabled = false,
+                newsEvery = 0,
+                trafficEvery = 0,
+                jingleEvery = 0,
+                adsEnabled = false,
+                morningPreroll = false,
+                noonPreroll = false,
+            ),
+            intros = listOf("intro"),
+            outros = listOf("outro"),
+            ads = listOf("ad"),
+        )
+
+        assertEquals(
+            listOf(SegmentType.MUSIC, SegmentType.MUSIC),
+            result.map { it.type },
+        )
+    }
+
+    @Test
     fun fullShowPreservesCompleteBroadcastOrder() {
         val result = ShowQueueBuilder<String>(title = { it }).build(
             tracks,
-            RadioSettings(broadcastMode = BroadcastMode.FULL_SHOW),
+            RadioSettings(broadcastMode = BroadcastMode.FULL_SHOW, adsEnabled = true),
             intros,
             outros,
             ads,
@@ -43,31 +81,64 @@ class QueueEngineTest {
     }
 
     @Test
-    fun classicIntervalsAreIndependent() {
-        val result = ShowQueueBuilder<String>().build(
-            List(6) { "Song " + it },
+    fun fullShowOmitsAdsWhenTheyAreDisabled() {
+        val result = ShowQueueBuilder<String>(title = { it }).build(
+            tracks,
+            RadioSettings(broadcastMode = BroadcastMode.FULL_SHOW, adsEnabled = false),
+            intros,
+            outros,
+            ads,
+        )
+        assertEquals(
+            listOf(
+                SegmentType.INTRO,
+                SegmentType.MUSIC,
+                SegmentType.OUTRO,
+                SegmentType.PREVIOUS_DISCUSSION,
+                SegmentType.WEATHER,
+                SegmentType.TRAFFIC,
+                SegmentType.NEWS,
+                SegmentType.NEXT_DISCUSSION,
+            ),
+            result.take(8).map { it.type },
+        )
+        assertTrue(result.none { it.type == SegmentType.AD || it.type == SegmentType.SPONSOR })
+    }
+
+    @Test
+    fun classicBreakMatchesWebOrderBeforeTheNextSong() {
+        val result = ShowQueueBuilder<String>(title = { it }).build(
+            List(3) { "Song " + it },
             RadioSettings(
                 broadcastMode = BroadcastMode.CLASSIC,
-                introInterval = 2,
-                outroInterval = 3,
-                discussionInterval = 2,
-                weatherInterval = 4,
-                trafficInterval = 5,
-                newsInterval = 6,
-                adInterval = 3,
-                sponsorInterval = 3,
+                adsEnabled = true,
+                morningPreroll = false,
+                noonPreroll = false,
+                frequency = 2,
+                newsEvery = 2,
+                trafficEvery = 2,
+                jingleEvery = 2,
+                adEvery = 2,
             ),
             intros,
             outros,
             ads,
         )
-        assertEquals(3, result.count { it.type == SegmentType.INTRO })
-        assertEquals(2, result.count { it.type == SegmentType.OUTRO })
-        assertEquals(3, result.count { it.type == SegmentType.PREVIOUS_DISCUSSION })
-        assertEquals(1, result.count { it.type == SegmentType.WEATHER })
-        assertEquals(1, result.count { it.type == SegmentType.TRAFFIC })
-        assertEquals(1, result.count { it.type == SegmentType.NEWS })
-        assertEquals(2, result.count { it.type == SegmentType.AD })
+        assertEquals(
+            listOf(
+                SegmentType.MUSIC,
+                SegmentType.MUSIC,
+                SegmentType.OUTRO,
+                SegmentType.NEWS,
+                SegmentType.AD,
+                SegmentType.SPONSOR,
+                SegmentType.TRAFFIC,
+                SegmentType.PREVIOUS_DISCUSSION,
+                SegmentType.INTRO,
+                SegmentType.MUSIC,
+            ),
+            result.map { it.type },
+        )
     }
 
     @Test

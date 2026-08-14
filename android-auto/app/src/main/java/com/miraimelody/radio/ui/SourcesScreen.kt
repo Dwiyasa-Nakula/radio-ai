@@ -105,6 +105,12 @@ fun SourcesScreen(viewModel: RadioViewModel) {
         }
         item {
             SectionCard("Jingles, ads, and BGM") {
+                Text(
+                    "Jingles and advertisements are built into the app and play offline. " +
+                        "Folders you add here join those pools rather than replacing them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = .7f),
+                )
                 FolderButton("Choose intro jingle folder") {
                     pendingFolder = SourceType.INTRO_JINGLE_FOLDER
                     folderLauncher.launch(null)

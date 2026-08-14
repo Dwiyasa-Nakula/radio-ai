@@ -199,6 +199,26 @@ class SourceRepository(
         runCatching { addYouTubePlaylist(playlistId) }
     }
 
+    /**
+     * Loads the jingles and ads packaged in the APK into the intro/outro/ad pools.
+     *
+     * Runs on every launch: [TrackDao.replaceSource] deletes before inserting, so re-seeding is
+     * idempotent, picks up manifest edits, and repairs rows a user deleted by hand. No
+     * [SourceEntity] is written—these are not folders the user can refresh or revoke, and keeping
+     * them out of the sources list stops [refresh] from treating an asset path as a SAF tree.
+     */
+    suspend fun seedBundledMedia() = withContext(Dispatchers.IO) {
+        runCatching {
+            val manifest = context.assets.open(BundledMedia.MANIFEST_PATH)
+                .use { it.readBytes().toString(Charsets.UTF_8) }
+            val tracks = BundledMedia.tracks(BundledMedia.parse(manifest))
+            tracks.groupBy(TrackEntity::sourceId).forEach { (sourceId, items) ->
+                database.tracks().replaceSource(sourceId, items)
+            }
+        }
+        Unit
+    }
+
     private suspend fun indexDocumentSource(source: SourceEntity, root: DocumentFile) {
         val role = source.type.role()
         val media = collectMediaRecursively(

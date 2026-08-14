@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "file": "negai-o-nosete.mp4",
+      "title": "Negai o Nosete",
+      "roles": ["INTRO", "OUTRO"]
+    },
+    {
+      "file": "ashita-no-sora-e.mp4",
+      "title": "明日の空へ",
+      "roles": ["INTRO", "OUTRO"]
+    },
+    {
+      "file": "mirai-ni-hibiku-melody-jingle-a.mp4",
+      "title": "未来に響くメロディ Jingle A",
+      "roles": ["INTRO", "OUTRO"]
+    },
+    {
+      "file": "kidojo-no-jingle-b.mp4",
+      "title": "軌道上の Jingle B",
+      "roles": ["INTRO", "OUTRO"]
+    },
+    {
+      "file": "atarashii-hibi-no-senritsu.mp3",
+      "title": "新しい日々の旋律",
+      "roles": ["INTRO"]
+    },
+    {
+      "file": "asa-no-hitotoki.mp4",
+      "title": "朝のひととき",
+      "roles": ["INTRO"]
+    },
+    {
+      "file": "asa-no.mp4",
+      "title": "朝の",
+      "roles": ["OUTRO"]
+    },
+    {
+      "file": "video-project-1.mp4",
+      "title": "Video Project 1",
+      "roles": ["OUTRO"]
+    },
+    {
+      "file": "ad-toyota-to-you.mp3",
+      "title": "TOYOTA TO YOU",
+      "artist": "Toyota",
+      "roles": ["AD"]
+    },
+    {
+      "file": "ad-hondajet.mp3",
+      "title": "HondaJet「空の自由をみんなのものへ」",
+      "artist": "Honda",
+      "roles": ["AD"]
+    },
+    {
+      "file": "ad-suzuki-jimny.mp3",
+      "title": "Suzuki Jimny",
+      "artist": "Suzuki",
+      "roles": ["AD"]
+    },
+    {
+      "file": "ad-mazda-cx5.mp3",
+      "title": "MAZDA CX-5「したいを叶える5つ星」",
+      "artist": "Mazda",
+      "roles": ["AD"]
+    },
+    {
+      "file": "ad-mazda-hashiritai.mp3",
+      "title": "MAZDA「走りたい。を、つくりたい。」宣言篇",
+      "artist": "Mazda",
+      "roles": ["AD"]
+    },
+    {
+      "file": "ad-mazda-japan-2019.mp3",
+      "title": "MAZDA CM 日本編 2019",
+      "artist": "Mazda",
+      "roles": ["AD"]
+    }
+  ]
+}

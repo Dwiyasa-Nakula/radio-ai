@@ -4,6 +4,8 @@ import com.miraimelody.radio.data.BroadcastMode
 import com.miraimelody.radio.data.LOCAL_FAVORITE_LIMIT
 import com.miraimelody.radio.data.QueueMode
 import com.miraimelody.radio.data.RadioSettings
+import java.time.ZoneId
+import java.time.ZonedDateTime
 import kotlin.random.Random
 
 enum class SegmentType {
@@ -25,6 +27,8 @@ data class ScheduledEntry<T>(
     val nextTrack: T? = null,
     val media: T? = null,
     val sponsorBrand: String = "",
+    val isPreroll: Boolean = false,
+    val isNoon: Boolean = false,
 )
 
 class ShuffleBag<T>(
@@ -85,6 +89,9 @@ class ShowQueueBuilder<T>(
     private val outroBag: ShuffleBag<T> = ShuffleBag(),
     private val adBag: ShuffleBag<T> = ShuffleBag(),
     private val title: (T) -> String = { it.toString() },
+    private val currentJstHour: () -> Int = {
+        ZonedDateTime.now(ZoneId.of("Asia/Tokyo")).hour
+    },
 ) {
     fun build(
         tracks: List<T>,
@@ -92,14 +99,20 @@ class ShowQueueBuilder<T>(
         intros: List<T>,
         outros: List<T>,
         ads: List<T>,
-    ): List<ScheduledEntry<T>> = when (settings.broadcastMode) {
-        BroadcastMode.FULL_SHOW -> fullShow(tracks, intros, outros, ads)
-        BroadcastMode.CLASSIC -> classic(tracks, settings, intros, outros, ads)
-        BroadcastMode.MUSIC_ONLY -> tracks.map { ScheduledEntry(SegmentType.MUSIC, track = it) }
+    ): List<ScheduledEntry<T>> {
+        if (!settings.hostEnabled || settings.broadcastMode == BroadcastMode.MUSIC_ONLY) {
+            return tracks.map { ScheduledEntry(SegmentType.MUSIC, track = it) }
+        }
+        return when (settings.broadcastMode) {
+            BroadcastMode.FULL_SHOW -> fullShow(tracks, settings, intros, outros, ads)
+            BroadcastMode.CLASSIC -> classic(tracks, settings, intros, outros, ads)
+            BroadcastMode.MUSIC_ONLY -> error("Handled above")
+        }
     }
 
     private fun fullShow(
         tracks: List<T>,
+        settings: RadioSettings,
         intros: List<T>,
         outros: List<T>,
         ads: List<T>,
@@ -113,29 +126,21 @@ class ShowQueueBuilder<T>(
             outroBag.next(outros)?.let {
                 add(ScheduledEntry(SegmentType.OUTRO, track = current, nextTrack = next, media = it))
             }
-            add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, current, next))
+            if (settings.chatterEnabled) {
+                add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, current, next))
+            }
             add(ScheduledEntry(SegmentType.WEATHER, current, next))
             add(ScheduledEntry(SegmentType.TRAFFIC, current, next))
             add(ScheduledEntry(SegmentType.NEWS, current, next))
-            val ad = adBag.next(ads)
-            if (ad != null) add(
-                ScheduledEntry(
-                    type = SegmentType.AD,
-                    track = current,
-                    nextTrack = next,
-                    media = ad,
-                    sponsorBrand = title(ad),
-                )
-            )
-            add(
-                ScheduledEntry(
-                    type = SegmentType.SPONSOR,
-                    track = current,
-                    nextTrack = next,
-                    sponsorBrand = ad?.let(title).orEmpty(),
-                )
-            )
-            add(ScheduledEntry(SegmentType.NEXT_DISCUSSION, current, next))
+            if (settings.adsEnabled) {
+                adBag.next(ads)?.let { ad ->
+                    add(ScheduledEntry(SegmentType.AD, current, next, ad, title(ad)))
+                    add(ScheduledEntry(SegmentType.SPONSOR, current, next, sponsorBrand = title(ad)))
+                }
+            }
+            if (settings.chatterEnabled) {
+                add(ScheduledEntry(SegmentType.NEXT_DISCUSSION, current, next))
+            }
         }
     }
 
@@ -146,59 +151,55 @@ class ShowQueueBuilder<T>(
         outros: List<T>,
         ads: List<T>,
     ): List<ScheduledEntry<T>> = buildList {
+        val first = tracks.firstOrNull()
+        val hour = currentJstHour()
+        val morning = settings.morningPreroll && hour in 5..10
+        val noon = settings.noonPreroll && hour in 11..13
+        if (first != null && (morning || noon)) {
+            add(ScheduledEntry(SegmentType.NEWS, nextTrack = first, isPreroll = true, isNoon = noon))
+            add(ScheduledEntry(SegmentType.WEATHER, nextTrack = first, isPreroll = true, isNoon = noon))
+        }
         tracks.forEachIndexed { index, current ->
-            val number = index + 1
-            val next = tracks[(index + 1) % tracks.size]
-            add(ScheduledEntry(SegmentType.MUSIC, current, next))
-            if (number due settings.outroInterval) {
-                outroBag.next(outros)?.let {
-                    add(ScheduledEntry(SegmentType.OUTRO, current, next, it))
+            val next = tracks.getOrElse(index + 1) { tracks.first() }
+            if (index > 0) {
+                val songsPlayed = index
+                val useJinglePair = songsPlayed due settings.jingleEvery
+                if (useJinglePair) {
+                    outroBag.next(outros)?.let {
+                        add(ScheduledEntry(SegmentType.OUTRO, tracks[index - 1], current, it))
+                    }
                 }
-            }
-            if (number due settings.discussionInterval) {
-                add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, current, next))
-            }
-            if (number due settings.weatherInterval) {
-                add(ScheduledEntry(SegmentType.WEATHER, current, next))
-            }
-            if (number due settings.trafficInterval) {
-                add(ScheduledEntry(SegmentType.TRAFFIC, current, next))
-            }
-            if (number due settings.newsInterval) {
-                add(ScheduledEntry(SegmentType.NEWS, current, next))
-            }
-            var selectedAd: T? = null
-            if (number due settings.adInterval) {
-                selectedAd = adBag.next(ads)
-                selectedAd?.let {
-                    add(
-                        ScheduledEntry(
-                            SegmentType.AD,
-                            current,
-                            next,
-                            it,
-                            title(it),
+                if (songsPlayed due settings.newsEvery) {
+                    add(ScheduledEntry(SegmentType.NEWS, tracks[index - 1], current))
+                }
+                if (settings.adsEnabled && songsPlayed due settings.adEvery) {
+                    adBag.next(ads)?.let { ad ->
+                        add(ScheduledEntry(SegmentType.AD, tracks[index - 1], current, ad, title(ad)))
+                        add(
+                            ScheduledEntry(
+                                SegmentType.SPONSOR,
+                                tracks[index - 1],
+                                current,
+                                sponsorBrand = title(ad),
+                            )
                         )
-                    )
+                    }
+                }
+                if (songsPlayed due settings.trafficEvery) {
+                    add(ScheduledEntry(SegmentType.TRAFFIC, tracks[index - 1], current))
+                }
+                if (settings.chatterEnabled && songsPlayed due settings.frequency) {
+                    add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, tracks[index - 1], current))
+                }
+                if (useJinglePair) {
+                    introBag.next(intros)?.let {
+                        add(ScheduledEntry(SegmentType.INTRO, tracks[index - 1], current, it))
+                    }
                 }
             }
-            if (number due settings.sponsorInterval) {
-                add(
-                    ScheduledEntry(
-                        SegmentType.SPONSOR,
-                        current,
-                        next,
-                        sponsorBrand = selectedAd?.let(title).orEmpty(),
-                    )
-                )
-            }
-            if (number due settings.introInterval) {
-                introBag.next(intros)?.let {
-                    add(ScheduledEntry(SegmentType.INTRO, current, next, it))
-                }
-            }
+            add(ScheduledEntry(SegmentType.MUSIC, current, next))
         }
     }
 
-    private infix fun Int.due(interval: Int): Boolean = this % interval.coerceAtLeast(1) == 0
+    private infix fun Int.due(interval: Int): Boolean = interval > 0 && this % interval == 0
 }
