@@ -17,7 +17,10 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -26,9 +29,12 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.miraimelody.radio.data.MediaRole
+import com.miraimelody.radio.network.EnrollmentException
+import com.miraimelody.radio.playback.MusicNormalizationProcessor
 import com.miraimelody.radio.playback.NativeMediaCatalog
 import com.miraimelody.radio.playback.PlaybackResolver
 import com.miraimelody.radio.playback.PlaybackStatus
+import com.miraimelody.radio.playback.SpeechBgmSource
 import com.miraimelody.radio.playback.RadioPlaybackStatus
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
@@ -42,6 +48,7 @@ class MiraiMediaService : MediaLibraryService() {
     private lateinit var app: MiraiApplication
     private lateinit var catalog: NativeMediaCatalog
     private lateinit var resolver: PlaybackResolver
+    private val normalizationProcessor = MusicNormalizationProcessor()
     private lateinit var mainPlayer: ExoPlayer
     private lateinit var bgmPlayer: ExoPlayer
     private lateinit var mediaSession: MediaLibrarySession
@@ -91,7 +98,18 @@ class MiraiMediaService : MediaLibraryService() {
         val upstream = DefaultDataSource.Factory(this, httpFactory)
         val resolving = ResolvingDataSource.Factory(upstream, resolver::resolve)
         val mediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(resolving)
-        mainPlayer = ExoPlayer.Builder(this)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf(normalizationProcessor))
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+                .build()
+        }
+        mainPlayer = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
@@ -102,6 +120,7 @@ class MiraiMediaService : MediaLibraryService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
         mainPlayer.addListener(PlayerEvents())
+        bgmPlayer.addListener(BgmEvents())
         mediaSession = MediaLibrarySession.Builder(this, mainPlayer, CatalogCallback()).build()
         connectivity = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         connectivity.registerDefaultNetworkCallback(networkCallback)
@@ -126,6 +145,18 @@ class MiraiMediaService : MediaLibraryService() {
         super.onDestroy()
     }
 
+    private inner class BgmEvents : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            if (!previousWasSpeech) return
+            val fallbackId = SpeechBgmSource.fallbackFor(bgmPlayer.currentMediaItem?.mediaId)
+                ?: return
+            val fallback = catalog.item(fallbackId) ?: return
+            bgmPlayer.setMediaItem(fallback)
+            bgmPlayer.repeatMode = Player.REPEAT_MODE_ONE
+            bgmPlayer.prepare()
+            bgmPlayer.play()
+        }
+    }
     private inner class PlayerEvents : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             retryCount = 0
@@ -133,12 +164,10 @@ class MiraiMediaService : MediaLibraryService() {
                 ?.getBoolean(NativeMediaCatalog.EXTRA_SPEECH, false) == true
             if (speech) startSpeechBgm() else if (previousWasSpeech) stopSpeechBgm()
             previousWasSpeech = speech
-            if (
-                mediaItem?.mediaMetadata?.extras
-                    ?.getBoolean(NativeMediaCatalog.EXTRA_MUSIC, false) == true
-            ) {
-                prefetchNextCycle()
-            }
+            val music = mediaItem?.mediaMetadata?.extras
+                ?.getBoolean(NativeMediaCatalog.EXTRA_MUSIC, false) == true
+            normalizationProcessor.enabled = music && app.settings.current().audioNormalization
+            if (music) prefetchNextCycle()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -147,6 +176,13 @@ class MiraiMediaService : MediaLibraryService() {
                 ?.getBoolean(NativeMediaCatalog.EXTRA_REMOTE, false) == true
             if (!remote) {
                 advanceOrPause("Local item could not be played")
+                return
+            }
+            // Media3 wraps the resolver's throw, so the enrollment failure is several causes
+            // deep. Retrying it would burn the whole budget and then report "Offline" for a
+            // device that is online and simply not connected to a backend.
+            if (generateSequence(error.cause) { it.cause }.any { it is EnrollmentException }) {
+                advanceOrPause(PlaybackStatus.NOT_ENROLLED)
                 return
             }
             if (retryCount < RETRY_DELAYS_MS.size) {
@@ -205,14 +241,16 @@ class MiraiMediaService : MediaLibraryService() {
         val resumeSpeech = mainPlayer.playWhenReady
         if (resumeSpeech) mainPlayer.pause()
         prefetchExecutor.execute {
-            val bgm = app.database.tracks().getByRoleBlocking(MediaRole.BGM).randomOrNull()
+            val bgmMediaId = SpeechBgmSource.choose(
+                app.database.tracks().getByRoleBlocking(MediaRole.BGM).map { it.mediaId }
+            )
             handler.post {
                 if (generation != bgmGeneration) return@post
-                if (bgm == null) {
+                val item = catalog.item(bgmMediaId)
+                if (item == null) {
                     if (resumeSpeech) mainPlayer.play()
                     return@post
                 }
-                val item = catalog.item(bgm.mediaId) ?: return@post
                 bgmPlayer.setMediaItem(item)
                 bgmPlayer.repeatMode = Player.REPEAT_MODE_ONE
                 bgmPlayer.volume = 0f

@@ -7,6 +7,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
 import com.miraimelody.radio.MiraiApplication
 import com.miraimelody.radio.data.AudioQuality
+import com.miraimelody.radio.network.EnrollmentException
 import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -20,6 +21,7 @@ class PlaybackResolver(private val app: MiraiApplication) {
         return when (uri.host) {
             "youtube" -> resolveYouTube(dataSpec, uri)
             "segment" -> dataSpec.withUri(Uri.fromFile(resolveSegment(uri)))
+            "bgm" -> resolveBackendBgm(dataSpec)
             else -> dataSpec.withUri(Uri.fromFile(app.cache.transitionFile()))
         }
     }
@@ -48,6 +50,14 @@ class PlaybackResolver(private val app: MiraiApplication) {
         return dataSpec.withUri(authenticated)
     }
 
+    @OptIn(UnstableApi::class)
+    private fun resolveBackendBgm(dataSpec: DataSpec): DataSpec {
+        val stream = app.backend.authenticatedStream("/v1/host/bgm")
+        val authenticated = Uri.parse(stream.url).buildUpon()
+            .appendQueryParameter("token", stream.bearerToken)
+            .build()
+        return dataSpec.withUri(authenticated)
+    }
     private fun resolveSegment(uri: Uri): File {
         val encoded = uri.pathSegments.firstOrNull()
             ?: return app.cache.transitionFile()
@@ -67,6 +77,13 @@ class PlaybackResolver(private val app: MiraiApplication) {
             } else {
                 app.cache.put(key, response.contentType, response.bytes)
             }
+        } catch (_: EnrollmentException) {
+            // Host segments fail closed to a transition sting, so an unenrolled device would
+            // otherwise just play silence-shaped filler with nothing on screen explaining why.
+            PlaybackStatus.update(
+                RadioPlaybackStatus(PlaybackStatus.NOT_ENROLLED, offline = true)
+            )
+            stale(kind) ?: app.cache.transitionFile()
         } catch (_: Exception) {
             stale(kind) ?: app.cache.transitionFile()
         }
