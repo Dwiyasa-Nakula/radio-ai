@@ -115,6 +115,10 @@ export interface TrafficInput {
   incidents: TrafficIncident[];
 }
 
+export function configuredOpenAgenticModel(): string {
+  return process.env.OPENAGENTIC_MODEL?.trim() || 'claude-sonnet-4.5-thinking';
+}
+
 async function callGroq(
   systemPrompt: string,
   userPrompt: string,
@@ -149,19 +153,20 @@ async function callGroq(
 
   // 3. Try OpenAgentic Claude fallback
   const openAgenticApiKey = process.env.OPENAGENTIC_API_KEY;
+  const openAgenticModel = configuredOpenAgenticModel();
   if (openAgenticApiKey) {
     try {
       const script = await executeOpenAgenticRequest(
-        'claude-sonnet-4.5-thinking',
+        openAgenticModel,
         openAgenticApiKey,
         systemPrompt,
         userPrompt,
         signal
       );
-      return { script, model: 'claude-sonnet-4.5-thinking (OpenAgentic)' };
+      return { script, model: openAgenticModel + ' (OpenAgentic)' };
     } catch (err) {
       if (signal?.aborted) throw err;
-      console.error('[OpenAgentic] claude-sonnet-4.5-thinking failed:', err);
+      console.error('[OpenAgentic] ' + openAgenticModel + ' failed:', err);
       throw err;
     }
   }

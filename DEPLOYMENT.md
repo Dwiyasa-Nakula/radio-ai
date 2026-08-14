@@ -91,7 +91,7 @@ All YouTube-resolution and DuckDuckGo research caches are disposable in-memory L
 1. Select a billing-enabled project and enable Cloud Run, Artifact Registry, Secret Manager, IAM Credentials, Security Token Service, Resource Manager, and Service Usage APIs.
 2. Create a Docker Artifact Registry repository named `radio-ai` in `asia-southeast1`.
 3. Create these Secret Manager secrets as applicable:
-   `BACKEND_SESSION_SECRET`, `MOBILE_DEVICE_CREDENTIAL_HASHES`, `YOUTUBE_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `TOMTOM_API_KEY`.
+   `BACKEND_SESSION_SECRET`, `MOBILE_DEVICE_CREDENTIAL_HASHES`, `YOUTUBE_API_KEY`, `YOUTUBE_PROXY_URL`, `GROQ_API_KEY`, `OPENAGENTIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `ANYVOICELAB_NONCE`, `ANYVOICELAB_NONCE_EN`, `ANYVOICELAB_COOKIE`, and `TOMTOM_API_KEY`.
 4. Generate at least 32 random bytes for `BACKEND_SESSION_SECRET`. Store the identical value in Vercel and Secret Manager. Never expose it as a `NEXT_PUBLIC_*` variable.
    Generate one personal Android enrollment credential and store only its lowercase SHA-256 hash in the comma-separated `MOBILE_DEVICE_CREDENTIAL_HASHES` secret. Set `BACKEND_PUBLIC_URL` to the canonical Cloud Run/custom-domain URL.
 5. Create a runtime service account with Secret Manager accessor on only the backend secrets.
@@ -131,8 +131,8 @@ gcloud run deploy $service `
   --min-instances 0 --max-instances 2 --port 8080 `
   --service-account "radio-ai-backend-runtime@$projectId.iam.gserviceaccount.com" `
   --allow-unauthenticated `
-  --set-env-vars "ALLOWED_ORIGINS=https://radio-ai-three.vercel.app" `
-  --set-secrets "BACKEND_SESSION_SECRET=BACKEND_SESSION_SECRET:latest,MOBILE_DEVICE_CREDENTIAL_HASHES=MOBILE_DEVICE_CREDENTIAL_HASHES:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,GROQ_API_KEY=GROQ_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,TOMTOM_API_KEY=TOMTOM_API_KEY:latest"
+  --set-env-vars "^@^ALLOWED_ORIGINS=https://radio-ai-three.vercel.app@GROQ_MODEL=llama-3.3-70b-versatile@OPENAGENTIC_MODEL=claude-sonnet-4.5-thinking@GEMINI_VOICE_NAME=Laomedeia@GEMINI_VOICE_CHATTER=Laomedeia@GEMINI_VOICE_NEWS=Erinome@GEMINI_VOICE_WEATHER=Aoede@GEMINI_VOICE_TRAFFIC=Pulcherrima@OPENROUTER_TTS_MODEL=google/gemini-3.1-flash-tts-preview@ANYVOICELAB_VOICE_ID=656306@ANYVOICELAB_VOICE_ID_EN=656224@ANYVOICELAB_LANGUAGE=ja@ANYVOICELAB_LANGUAGE_EN=en@TOMTOM_BBOX=139.5,35.5,140.0,35.8@TOMTOM_TIME_VALIDITY=present,future" `
+  --set-secrets "BACKEND_SESSION_SECRET=BACKEND_SESSION_SECRET:latest,MOBILE_DEVICE_CREDENTIAL_HASHES=MOBILE_DEVICE_CREDENTIAL_HASHES:latest,YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,YOUTUBE_PROXY_URL=YOUTUBE_PROXY_URL:latest,GROQ_API_KEY=GROQ_API_KEY:latest,OPENAGENTIC_API_KEY=OPENAGENTIC_API_KEY:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest,ANYVOICELAB_NONCE=ANYVOICELAB_NONCE:latest,ANYVOICELAB_NONCE_EN=ANYVOICELAB_NONCE_EN:latest,ANYVOICELAB_COOKIE=ANYVOICELAB_COOKIE:latest,TOMTOM_API_KEY=TOMTOM_API_KEY:latest"
 ```
 
 Replace `ALLOWED_ORIGINS` with exact comma-separated HTTPS origins when the website is

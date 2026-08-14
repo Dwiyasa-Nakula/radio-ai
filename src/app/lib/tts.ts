@@ -9,6 +9,10 @@ export interface TtsResult {
   provider: 'gemini-tts' | 'style-bert-vits2' | 'anyvoicelab';
 }
 
+export function configuredOpenRouterTtsModel(): string {
+  return process.env.OPENROUTER_TTS_MODEL?.trim() || 'google/gemini-3.1-flash-tts-preview';
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -140,7 +144,7 @@ async function synthesizeOpenRouterTts(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-3.1-flash-tts-preview',
+      model: configuredOpenRouterTtsModel(),
       input: text,
       voice: voiceName,
       response_format: 'pcm',

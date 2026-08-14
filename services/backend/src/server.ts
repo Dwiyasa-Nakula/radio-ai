@@ -6,6 +6,7 @@ import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { google, type youtube_v3 } from 'googleapis';
 import { jwtVerify } from 'jose';
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import type { AudioQuality, HostSegmentRequest, SongMetadata, YouTubeVideoMetadata } from '@radio-ai/contracts';
 import {
   generateChatter,
@@ -34,6 +35,7 @@ import { buildSponsorScript, sanitizeSponsorBrand } from '../../../src/app/lib/s
 import { synthesize, synthesizeAnyVoice } from '../../../src/app/lib/tts';
 import type { AnnouncerLanguage, RadioCountryCode, RadioStation, Track } from '../../../src/app/lib/types';
 import {
+  configuredYoutubeProxyUrl,
   invalidateYouTubeAudio,
   isYouTubeChallengeError,
   resolveYouTubeAudio,
@@ -64,6 +66,8 @@ const UNAVAILABLE_TITLES = new Set(['Deleted video', 'Private video']);
 const mobileCredentialHashes = configuredCredentialHashes(process.env.MOBILE_DEVICE_CREDENTIAL_HASHES);
 const youtubeStreamingEnabled = process.env.YOUTUBE_STREAMING_ENABLED !== 'false';
 const youtubeProviderUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim().replace(/\/$/, '');
+const youtubeProxyUrl = configuredYoutubeProxyUrl();
+const youtubeProxyAgent = youtubeProxyUrl ? new ProxyAgent(youtubeProxyUrl) : undefined;
 const youtubeCircuit = new YouTubeCircuitBreaker();
 
 const youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
@@ -332,7 +336,7 @@ async function streamAdFile(
   });
 }
 
-function copyUpstreamHeaders(response: Response, upstream: globalThis.Response, entry: ResolvedYouTubeAudio, cacheStatus: string) {
+function copyUpstreamHeaders(response: Response, upstream: { headers: { get(name: string): string | null } }, entry: ResolvedYouTubeAudio, cacheStatus: string) {
   response.setHeader('Cache-Control', 'no-store');
   response.setHeader('Accept-Ranges', 'bytes');
   response.setHeader(
@@ -362,15 +366,15 @@ async function streamYoutubeAudio(request: Request, response: Response, videoId:
     throw error;
   }
   const { entry, cacheStatus } = resolved;
-  const headers = new Headers(entry.requestHeaders);
-  if (request.header('range')) headers.set('Range', request.header('range')!);
-  headers.set('Accept-Encoding', 'identity');
-  const upstream = await fetch(entry.url, {
+  const headers: Record<string, string> = { ...entry.requestHeaders, 'Accept-Encoding': 'identity' };
+  if (request.header('range')) headers.Range = request.header('range')!;
+  const upstream = await undiciFetch(entry.url, {
     method: request.method === 'HEAD' ? 'HEAD' : 'GET',
     headers,
     redirect: 'follow',
     cache: 'no-store',
     signal: requestSignal(request, response),
+    dispatcher: youtubeProxyAgent,
   });
   if (!forceRefresh && RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
     await upstream.body?.cancel().catch(() => undefined);

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { rankRadioStations } from '../../../src/app/lib/radioQuality';
 import {
   isYouTubeChallengeError,
+  redactYouTubeProxyCredentials,
   youtubeCacheKey,
   youtubeExtractorArguments,
   youtubeFormatSelector,
@@ -51,21 +52,34 @@ test('radio ranking follows high, balanced, and data saver priorities', () => {
   assert.equal(rankRadioStations(stations, 'dataSaver')[0].id, 'efficient');
 });
 
-test('YouTube extraction uses mweb and the configured PO-token provider', () => {
-  const original = process.env.YOUTUBE_PO_PROVIDER_URL;
+test('YouTube extraction uses the configured proxy and mweb PO-token provider', () => {
+  const originalProvider = process.env.YOUTUBE_PO_PROVIDER_URL;
+  const originalProxy = process.env.YOUTUBE_PROXY_URL;
   process.env.YOUTUBE_PO_PROVIDER_URL = 'http://127.0.0.1:4416';
+  process.env.YOUTUBE_PROXY_URL = 'https://login:password@proxy.example.com:1234';
   try {
     const args = youtubeExtractorArguments();
     assert.ok(args.includes('youtube:player_client=mweb'));
     assert.deepEqual(args.slice(0, 2), ['--js-runtimes', 'node']);
     assert.ok(args.includes('youtubepot-bgutilhttp:base_url=http://127.0.0.1:4416'));
     assert.ok(!args.some((argument) => argument.includes('player_client=android')));
+    const proxyIndex = args.indexOf('--proxy');
+    assert.equal(args[proxyIndex + 1], 'https://login:password@proxy.example.com:1234');
+
     const fallbackArgs = youtubeExtractorArguments('android_vr');
     assert.ok(fallbackArgs.includes('youtube:player_client=android_vr'));
     assert.ok(!fallbackArgs.some((argument) => argument.includes('youtubepot-bgutilhttp')));
+    const fallbackProxyIndex = fallbackArgs.indexOf('--proxy');
+    assert.equal(fallbackArgs[fallbackProxyIndex + 1], 'https://login:password@proxy.example.com:1234');
+    assert.equal(
+      redactYouTubeProxyCredentials('failed --proxy https://login:password@proxy.example.com:1234'),
+      'failed --proxy [redacted proxy]'
+    );
   } finally {
-    if (original === undefined) delete process.env.YOUTUBE_PO_PROVIDER_URL;
-    else process.env.YOUTUBE_PO_PROVIDER_URL = original;
+    if (originalProvider === undefined) delete process.env.YOUTUBE_PO_PROVIDER_URL;
+    else process.env.YOUTUBE_PO_PROVIDER_URL = originalProvider;
+    if (originalProxy === undefined) delete process.env.YOUTUBE_PROXY_URL;
+    else process.env.YOUTUBE_PROXY_URL = originalProxy;
   }
 });
 

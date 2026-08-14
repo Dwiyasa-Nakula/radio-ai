@@ -21,6 +21,7 @@
     "googleapis": "^154.1.0",
     "jose": "^6.1.2",
     "music-metadata": "^11.12.3",
+    "undici": "7.29.0",
     "youtube-dl-exec": "^3.1.7"
   },
   "devDependencies": {

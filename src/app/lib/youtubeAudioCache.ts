@@ -155,8 +155,38 @@ export function youtubeCacheKey(videoId: string, quality: AudioQuality): string 
 
 type YouTubePlayerClient = 'mweb' | 'android_vr';
 
+export function configuredYoutubeProxyUrl(): string | undefined {
+  const raw = process.env.YOUTUBE_PROXY_URL?.trim();
+  if (!raw) return undefined;
+  const proxy = new URL(raw);
+  if (!['http:', 'https:'].includes(proxy.protocol) || !proxy.hostname || !proxy.port) {
+    throw new Error('YOUTUBE_PROXY_URL must be an HTTP(S) proxy URL with a host and port');
+  }
+  return raw;
+}
+
+export function redactYouTubeProxyCredentials(message: string): string {
+  const configuredProxy = process.env.YOUTUBE_PROXY_URL?.trim();
+  const withoutConfiguredProxy = configuredProxy
+    ? message.split(configuredProxy).join('[redacted proxy]')
+    : message;
+  return withoutConfiguredProxy.replace(
+    /((?:https?):\/\/)[^\s/@]+@/gi,
+    '$1[redacted]@'
+  );
+}
+
+function sanitizedExtractionError(error: unknown): Error {
+  const candidate = error as { message?: unknown; stderr?: unknown };
+  const message = [candidate?.message, candidate?.stderr]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n');
+  return new Error(redactYouTubeProxyCredentials(message || String(error)));
+}
+
 export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'mweb'): string[] {
   const providerUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim();
+  const proxyUrl = configuredYoutubeProxyUrl();
   return [
     '--js-runtimes',
     'node',
@@ -165,6 +195,7 @@ export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'm
     ...(providerUrl && playerClient === 'mweb'
       ? ['--extractor-args', 'youtubepot-bgutilhttp:base_url=' + providerUrl]
       : []),
+    ...(proxyUrl ? ['--proxy', proxyUrl] : []),
   ];
 }
 
@@ -198,8 +229,9 @@ async function resolveFresh(videoId: string, quality: AudioQuality): Promise<Res
       extractionError = undefined;
       break;
     } catch (error) {
-      extractionError = error;
-      if (!isYouTubeChallengeError(error)) break;
+      const challenged = isYouTubeChallengeError(error);
+      extractionError = sanitizedExtractionError(error);
+      if (!challenged) break;
     }
   }
 
