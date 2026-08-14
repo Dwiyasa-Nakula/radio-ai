@@ -172,6 +172,45 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
         message("Generated audio and artwork cache cleared")
     }
 
+    fun updateHostEnabled(value: Boolean) = task(null) {
+        app.settings.updateHostEnabled(value)
+    }
+
+    fun updateChatterEnabled(value: Boolean) = task(null) {
+        app.settings.updateChatterEnabled(value)
+    }
+
+    fun updateResearchedChatter(value: Boolean) = task(null) {
+        app.settings.updateResearchedChatter(value)
+    }
+
+    fun updateNewsFocus(value: String) = task(null) {
+        app.settings.updateNewsFocus(value)
+    }
+
+    fun updateAdsEnabled(value: Boolean) = task(null) {
+        app.settings.updateAdsEnabled(value)
+    }
+
+    fun updateMorningPreroll(value: Boolean) = task(null) {
+        app.settings.updateMorningPreroll(value)
+    }
+
+    fun updateNoonPreroll(value: Boolean) = task(null) {
+        app.settings.updateNoonPreroll(value)
+    }
+
+    fun updateDjMemoryEnabled(value: Boolean) = task(null) {
+        app.settings.updateDjMemoryEnabled(value)
+    }
+
+    fun updateListenerInteractionEnabled(value: Boolean) = task(null) {
+        app.settings.updateListenerInteractionEnabled(value)
+    }
+
+    fun updateAudioNormalization(value: Boolean) = task(null) {
+        app.settings.updateAudioNormalization(value)
+    }
     fun updateBroadcastMode(value: BroadcastMode) = task(null) {
         app.settings.updateBroadcastMode(value)
     }
@@ -193,16 +232,13 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateClassicIntervals(values: List<Int>) = task("Classic schedule saved") {
-        require(values.size == 8)
+        require(values.size == 5)
         app.settings.updateClassicIntervals(
-            intro = values[0],
-            outro = values[1],
-            discussion = values[2],
-            weather = values[3],
-            traffic = values[4],
-            news = values[5],
-            ad = values[6],
-            sponsor = values[7],
+            frequency = values[0],
+            newsEvery = values[1],
+            trafficEvery = values[2],
+            jingleEvery = values[3],
+            adEvery = values[4],
         )
     }
 

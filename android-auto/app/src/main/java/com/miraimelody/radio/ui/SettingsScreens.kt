@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -41,25 +43,20 @@ import java.util.Locale
 @Composable
 fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    var newsFocus by remember(settings.newsFocus) { mutableStateOf(settings.newsFocus) }
     val intervals = remember(
-        settings.introInterval,
-        settings.outroInterval,
-        settings.discussionInterval,
-        settings.weatherInterval,
-        settings.trafficInterval,
-        settings.newsInterval,
-        settings.adInterval,
-        settings.sponsorInterval,
+        settings.frequency,
+        settings.newsEvery,
+        settings.trafficEvery,
+        settings.jingleEvery,
+        settings.adEvery,
     ) {
         mutableStateListOf(
-            settings.introInterval.toString(),
-            settings.outroInterval.toString(),
-            settings.discussionInterval.toString(),
-            settings.weatherInterval.toString(),
-            settings.trafficInterval.toString(),
-            settings.newsInterval.toString(),
-            settings.adInterval.toString(),
-            settings.sponsorInterval.toString(),
+            settings.frequency.toString(),
+            settings.newsEvery.toString(),
+            settings.trafficEvery.toString(),
+            settings.jingleEvery.toString(),
+            settings.adEvery.toString(),
         )
     }
     LazyColumn(
@@ -125,20 +122,92 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xff39d4e8),
                 )
+                SettingSwitch(
+                    label = "Audio normalization",
+                    checked = settings.audioNormalization,
+                    onCheckedChange = viewModel::updateAudioNormalization,
+                )
+            }
+        }
+        item {
+            SettingsCard("AI host") {
+                SettingSwitch(
+                    label = "Enable AI host",
+                    checked = settings.hostEnabled,
+                    onCheckedChange = viewModel::updateHostEnabled,
+                )
+                SettingSwitch(
+                    label = "Song discussion",
+                    checked = settings.chatterEnabled,
+                    enabled = settings.hostEnabled,
+                    onCheckedChange = viewModel::updateChatterEnabled,
+                )
+                SettingSwitch(
+                    label = "Web-researched song trivia",
+                    checked = settings.researchedChatter,
+                    enabled = settings.hostEnabled && settings.chatterEnabled,
+                    onCheckedChange = viewModel::updateResearchedChatter,
+                )
+                SettingSwitch(
+                    label = "DJ memory",
+                    checked = settings.djMemoryEnabled,
+                    enabled = settings.hostEnabled && settings.chatterEnabled,
+                    onCheckedChange = viewModel::updateDjMemoryEnabled,
+                )
+                SettingSwitch(
+                    label = "Listener-style interaction",
+                    checked = settings.listenerInteractionEnabled,
+                    enabled = settings.hostEnabled && settings.chatterEnabled,
+                    onCheckedChange = viewModel::updateListenerInteractionEnabled,
+                )
+                OutlinedTextField(
+                    value = newsFocus,
+                    onValueChange = { newsFocus = it.take(160) },
+                    label = { Text("News focus") },
+                    placeholder = { Text("Japan technology, anime industry...") },
+                    enabled = settings.hostEnabled,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = { viewModel.updateNewsFocus(newsFocus) },
+                    enabled = settings.hostEnabled && newsFocus != settings.newsFocus,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Save news focus") }
+            }
+        }
+        item {
+            SettingsCard("Station breaks") {
+                SettingSwitch(
+                    label = "Advertisements in Classic Schedule",
+                    checked = settings.adsEnabled,
+                    enabled = settings.hostEnabled,
+                    onCheckedChange = viewModel::updateAdsEnabled,
+                )
+                SettingSwitch(
+                    label = "Morning news and weather preroll",
+                    checked = settings.morningPreroll,
+                    enabled = settings.hostEnabled,
+                    onCheckedChange = viewModel::updateMorningPreroll,
+                )
+                SettingSwitch(
+                    label = "Noon news and weather preroll",
+                    checked = settings.noonPreroll,
+                    enabled = settings.hostEnabled,
+                    onCheckedChange = viewModel::updateNoonPreroll,
+                )
             }
         }
         if (settings.broadcastMode == BroadcastMode.CLASSIC) {
             item {
                 SettingsCard("Classic intervals · songs") {
+                    Text("Set 0 to disable News, Traffic, or Jingles.")
                     val labels = listOf(
-                        "Intro jingle",
-                        "Outro jingle",
-                        "Discussion",
-                        "Weather",
-                        "Traffic",
-                        "News",
-                        "Advertisement",
-                        "Sponsor TTS",
+                        "Speak every",
+                        "News every",
+                        "Traffic every",
+                        "Jingle every",
+                        "Advertisement every",
                     )
                     labels.chunked(2).forEachIndexed { row, pair ->
                         Row(
@@ -162,7 +231,13 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
                     Button(
                         onClick = {
                             viewModel.updateClassicIntervals(
-                                intervals.map { it.toIntOrNull()?.coerceIn(1, 99) ?: 1 }
+                                listOf(
+                                    intervals[0].toIntOrNull()?.coerceIn(1, 5) ?: 1,
+                                    intervals[1].toIntOrNull()?.coerceIn(0, 10) ?: 0,
+                                    intervals[2].toIntOrNull()?.coerceIn(0, 20) ?: 0,
+                                    intervals[3].toIntOrNull()?.coerceIn(0, 10) ?: 0,
+                                    intervals[4].toIntOrNull()?.coerceIn(1, 20) ?: 1,
+                                )
                             )
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -179,7 +254,8 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
                     valueRange = 0f..0.5f,
                 )
                 Text(
-                    "Default 10% · 1.2s fade-in · 0.6s lead-in · 0.8s tail · 1.2s fade-out",
+                    "Uses local BGM when selected, otherwise streams the station BGM with a packaged fallback. " +
+                        "Default 10% · 1.2s fade-in · 0.6s lead-in · 0.8s tail · 1.2s fade-out",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = .65f),
                 )
@@ -285,6 +361,27 @@ fun ConnectionScreen(viewModel: RadioViewModel) {
                 ) { Text("Clear generated cache") }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingSwitch(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(label, modifier = Modifier.weight(1f))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+        )
     }
 }
 

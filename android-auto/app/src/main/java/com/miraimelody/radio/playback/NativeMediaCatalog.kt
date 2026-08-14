@@ -14,6 +14,7 @@ import com.miraimelody.radio.data.TrackEntity
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.Locale
+import org.json.JSONArray
 import org.json.JSONObject
 
 class NativeMediaCatalog(private val app: MiraiApplication) {
@@ -21,6 +22,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
 
     private val knownItems = mutableMapOf<String, MediaItem>()
     private val builder = ShowQueueBuilder<TrackEntity>(title = TrackEntity::title)
+    private val recentSongs = ArrayDeque<TrackEntity>()
 
     fun root(): MediaItem = browsable(ROOT, "mirAI melody", "Standalone native radio")
 
@@ -46,6 +48,8 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
 
     fun item(mediaId: String): MediaItem? {
         if (mediaId == ROOT) return root()
+        if (mediaId == SpeechBgmSource.BACKEND_MEDIA_ID) return backendBgm()
+        if (mediaId == SpeechBgmSource.PACKAGED_MEDIA_ID) return packagedBgm()
         return knownItems[mediaId] ?: app.database.tracks().getBlocking(mediaId)?.let(::playable)
     }
 
@@ -99,7 +103,9 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
         settings: RadioSettings,
         index: Int,
     ): MediaItem = when (entry.type) {
-        SegmentType.MUSIC -> playable(requireNotNull(entry.track))
+        SegmentType.MUSIC -> playable(requireNotNull(entry.track)).also {
+            rememberSong(requireNotNull(entry.track))
+        }
         SegmentType.INTRO, SegmentType.OUTRO, SegmentType.AD ->
             playable(requireNotNull(entry.media))
         SegmentType.PREVIOUS_DISCUSSION,
@@ -147,17 +153,37 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
                     "discussionFocus",
                     if (entry.type == SegmentType.PREVIOUS_DISCUSSION) "previous" else "next",
                 )
-                payload.put("listenerInteraction", true)
-                payload.put("researchedTrivia", true)
+                payload.put("listenerInteraction", settings.listenerInteractionEnabled)
+                payload.put("researchedTrivia", settings.researchedChatter)
+                if (settings.djMemoryEnabled && recentSongs.isNotEmpty()) {
+                    payload.put(
+                        "memory",
+                        JSONObject()
+                            .put(
+                                "songs",
+                                JSONArray(recentSongs.map { song ->
+                                    JSONObject()
+                                        .put("title", song.title)
+                                        .put("artist", song.artist)
+                                        .put("album", song.album)
+                                }),
+                            )
+                            .put("announcements", JSONArray()),
+                    )
+                }
             }
             SegmentType.SPONSOR ->
                 payload.put("brand", entry.sponsorBrand.ifBlank { "mirAI melody" })
+            SegmentType.NEWS -> payload.put("focus", settings.newsFocus)
+            SegmentType.WEATHER -> payload.put("isNoon", entry.isNoon)
             else -> Unit
         }
+        if (entry.isPreroll) payload.put("isPreroll", true)
         val encoded = Base64.getUrlEncoder().withoutPadding()
             .encodeToString(payload.toString().toByteArray(StandardCharsets.UTF_8))
         val currentId = current?.mediaId ?: "station"
-        val cacheKey = kind + ":" + currentId + ":" + index + ":" + language
+        val cacheKey = kind + ":" + currentId + ":" + index + ":" + language + ":" +
+            payload.toString().hashCode().toUInt().toString(16)
         val uri = Uri.Builder()
             .scheme("mirai")
             .authority("segment")
@@ -172,7 +198,6 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
             SegmentType.NEWS -> "News"
             SegmentType.SPONSOR -> "Sponsor: " + entry.sponsorBrand
             SegmentType.NEXT_DISCUSSION -> "Next Song Discussion"
-            else -> "AI host"
         }
         return MediaItem.Builder()
             .setMediaId("show:" + cacheKey)
@@ -193,6 +218,12 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
                     .build()
             )
             .build()
+    }
+
+    private fun rememberSong(track: TrackEntity) {
+        recentSongs.removeAll { it.mediaId == track.mediaId }
+        recentSongs.addLast(track)
+        while (recentSongs.size > 10) recentSongs.removeFirst()
     }
 
     private fun playable(track: TrackEntity): MediaItem {
@@ -220,6 +251,35 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
             .build()
     }
 
+    private fun backendBgm(): MediaItem = MediaItem.Builder()
+        .setMediaId(SpeechBgmSource.BACKEND_MEDIA_ID)
+        .setUri(Uri.parse(SpeechBgmSource.BACKEND_URI))
+        .setMimeType("audio/mpeg")
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle("mirAI melody speech BGM")
+                .setArtist("mirAI melody")
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setExtras(Bundle().apply { putBoolean(EXTRA_REMOTE, true) })
+                .build()
+        )
+        .build()
+
+    private fun packagedBgm(): MediaItem = MediaItem.Builder()
+        .setMediaId(SpeechBgmSource.PACKAGED_MEDIA_ID)
+        .setUri(Uri.parse(SpeechBgmSource.PACKAGED_URI))
+        .setMimeType("audio/mpeg")
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle("mirAI melody packaged speech BGM")
+                .setArtist("mirAI melody")
+                .setIsBrowsable(false)
+                .setIsPlayable(true)
+                .setExtras(Bundle().apply { putBoolean(EXTRA_REMOTE, false) })
+                .build()
+        )
+        .build()
     private fun browsable(id: String, title: String, description: String): MediaItem =
         MediaItem.Builder()
             .setMediaId(id)

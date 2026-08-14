@@ -10,17 +10,25 @@ website URL, browser storage, cookies, or Next.js session dependency.
 - Media3 MediaLibraryService as the single playback owner for phone, lock screen,
   notification, and Android Auto.
 - Storage Access Framework folders with permissions retained across restarts.
+- Jingles and advertisements packaged in the APK. A fresh install plays intro and
+  outro jingles with no folder picking, no enrollment, and no network. Picked
+  folders join these pools rather than replacing them, and bundled advertisements
+  only play once the Advertisements switch is on.
 - Native MP3/MP4 metadata extraction. Embedded artwork and MP4 video frames are
   cached for the phone and Android Auto.
 - Room source/queue persistence, DataStore settings, and an AES-GCM enrollment
   credential protected by Android Keystore.
-- Full Show, independently scheduled Classic mode, and Music Only.
+- Full Show, web-compatible Classic scheduling, Music Only, host enable/disable,
+  researched chatter, news focus, DJ memory, listener interaction, ads, and JST prerolls.
 - Unlimited-depth SAF root-folder discovery without a 2,000-file cap.
 - Ordered/random queues, up to ten favorites, and approximately 10% extra
   favorite rotation.
 - Japanese/English announcers and High/Balanced/Data Saver codec/bitrate choices.
-- Secondary local BGM player with 10% default volume, fade-in, speech lead-in,
-  tail, and fade-out.
+- Optional bounded PCM music normalization; speech and BGM remain unprocessed.
+- Secondary BGM player with 10% default volume, fade-in, speech lead-in, tail,
+  and fade-out. A selected local BGM remains preferred; otherwise the player uses the
+  authenticated backend `/v1/host/bgm` station track, then the packaged copy if the backend
+  route is unavailable.
 
 Full Show order:
 
@@ -38,7 +46,7 @@ Deploy services/backend separately. Configure:
 The backend stores only configured SHA-256 hashes. The phone sends
 Authorization: Device <enrollment-secret> to POST /v1/mobile/session, stores
 the credential encrypted locally, and refreshes the one-hour scoped token five
-minutes before expiry. AI, TTS, YouTube, weather, traffic, and news credentials
+minutes before expiry. AI, TTS, YouTube, BGM, weather, traffic, and news credentials
 remain on the backend.
 
 The optional build-time backend default is:
@@ -66,7 +74,9 @@ release signing key outside the repository for personal distribution.
 
 Select a music folder through Sources, start a local track, then enable airplane
 mode. Local music, MP3/MP4 jingles and ads, artwork, and BGM continue without a
-website or backend. Generated host segments use the recent 250 MB LRU cache when
+website or backend. Jingles need no folder at all: the packaged set under
+`app/src/main/assets/bundled` is seeded into the intro/outro pools on every launch
+and is described by `bundled/manifest.json`. Generated host segments use the recent 250 MB LRU cache when
 fresh enough, otherwise a short local transition advances the queue. YouTube and
 live radio are retried with bounded backoff and are never downloaded.
 
