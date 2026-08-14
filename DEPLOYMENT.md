@@ -394,3 +394,27 @@ Fixed-canary evidence:
 The fixed media image was therefore **not promoted**. Production remains 100% on
 `radio-ai-backend-00017-xas`; revisions `00020-vam` and `00021-goq` remain at 0%.
 Promote only after fresh representative YouTube audio ranges return `206`.
+
+### Authenticated proxy rollout (2026-08-15)
+
+The `YOUTUBE_PROXY_URL` secret had been attached to Cloud Run but was not consumed by
+the application. Commit `3aba0f7216c89faa4d925d5814962eb31e8decc5` passes the
+authenticated HTTP proxy to both yt-dlp extraction and the subsequent Googlevideo byte
+stream, redacts proxy credentials from extraction errors, and preserves all provider
+settings and secret mappings in the deploy workflow.
+
+Cloud Build `70711fd3-2129-48a7-808f-5bca98671865` produced the immutable image and
+deployed it as revision `radio-ai-backend-00022-gep`, tagged `proxy-3aba0f7`.
+
+Promotion evidence:
+
+- The configured DataImpulse proxy authenticated successfully and reached YouTube with `204`.
+- `/health` and `/readyz`: `200`; authenticated BGM, intro, outro, and ad ranges: `206`.
+- Control `dQw4w9WgXcQ` and representative playlist IDs `AXnqkVTFUqY` and
+  `QK8BUygFR1U`: `206 audio/mp4`, 65,536 bytes each on both the canary and canonical URL.
+- A repeated representative request returned `206`, exercising cached resolution plus
+  proxy-backed media streaming.
+- Revision logs contained no `YOUTUBE_CHALLENGE`, `youtube_audio_failed`, proxy URL, or
+  proxy credential occurrences during validation.
+
+Revision `radio-ai-backend-00022-gep` was promoted to **100% production traffic**.
