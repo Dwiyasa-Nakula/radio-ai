@@ -32,6 +32,8 @@ COPY public/ads public/ads
 COPY public/audio public/audio
 COPY ["public/Intro jingles", "public/Intro jingles"]
 COPY ["public/Outro Jingle", "public/Outro Jingle"]
+COPY android-auto/app/src/main/assets/bundled android-auto/app/src/main/assets/bundled
+RUN node --input-type=module -e "import { copyFileSync, mkdirSync, readFileSync } from 'node:fs'; import { basename, join } from 'node:path'; const source = 'android-auto/app/src/main/assets/bundled'; const manifest = JSON.parse(readFileSync(join(source, 'manifest.json'), 'utf8')); const destinations = { INTRO: 'public/Intro jingles', OUTRO: 'public/Outro Jingle', AD: 'public/ads' }; for (const item of manifest.items ?? []) { if (!item || typeof item.file !== 'string' || !Array.isArray(item.roles)) continue; const fileName = basename(item.file); if (fileName !== item.file) throw new Error('Invalid bundled media path'); for (const role of item.roles) { const destination = destinations[role]; if (!destination) continue; mkdirSync(destination, { recursive: true }); copyFileSync(join(source, 'media', fileName), join(destination, fileName)); } }"
 RUN npm run build:backend
 
 FROM node:22-bookworm-slim AS runtime
