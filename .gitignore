@@ -49,7 +49,8 @@ next-env.d.ts
 /.claude/
 
 # media files
-/public/audio/
+/public/audio/*
+!/public/audio/bgm.mp3
 /public/jingles/*
 !/public/jingles/.gitkeep
 /public/Intro jingles/*

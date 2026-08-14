@@ -42,6 +42,7 @@ import {
   type ResolvedYouTubeAudio,
 } from '../../../src/app/lib/youtubeAudioCache';
 import { findConfiguredAdFile, parseByteRange } from './adDelivery';
+import { stationBgm } from './stationBgm';
 import {
   configuredCredentialHashes,
   credentialMatches,
@@ -672,6 +673,18 @@ app.post('/v1/radio/click/:stationId', authorize('radio:read'), async (request, 
     await fetchRadioBrowserJson(`/json/url/${encodeURIComponent(stationId)}`, requestSignal(request, response));
   } catch {}
   response.status(204).end();
+});
+
+app.get('/v1/host/bgm', authorize('host:generate'), async (request, response) => {
+  const bgm = stationBgm();
+  try {
+    await streamLocalMedia(request, response, bgm.filePath, {
+      'Content-Type': bgm.contentType,
+      'X-Station-Media': 'speech-bgm',
+    });
+  } catch {
+    response.status(404).json({ error: 'Station BGM is not configured' });
+  }
 });
 
 app.get('/v1/host/jingles/random', authorize('host:generate'), async (request, response) => {

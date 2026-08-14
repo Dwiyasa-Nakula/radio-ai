@@ -29,6 +29,7 @@ COPY packages/contracts packages/contracts
 COPY services/backend services/backend
 COPY src/app/lib src/app/lib
 COPY public/ads public/ads
+COPY public/audio public/audio
 COPY ["public/Intro jingles", "public/Intro jingles"]
 COPY ["public/Outro Jingle", "public/Outro Jingle"]
 RUN npm run build:backend
@@ -53,6 +54,7 @@ RUN npm ci --omit=dev --legacy-peer-deps --workspace @radio-ai/backend
 COPY --from=build /workspace/services/backend/dist services/backend/dist
 COPY --from=build /workspace/services/backend/run.mjs services/backend/run.mjs
 COPY --from=build /workspace/public/ads public/ads
+COPY --from=build /workspace/public/audio public/audio
 COPY --from=build ["/workspace/public/Intro jingles", "public/Intro jingles"]
 COPY --from=build ["/workspace/public/Outro Jingle", "public/Outro Jingle"]
 RUN chown -R node:node /app /opt/bgutil-provider

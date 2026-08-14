@@ -64,6 +64,7 @@ The OCI image is built from `services/backend/Dockerfile`. It listens on `0.0.0.
 - `GET /readyz`
 - `POST /v1/mobile/session`
 - `POST /v1/host/segments`
+- GET|HEAD /v1/host/bgm (authenticated speech background track with byte ranges)
 - `GET /v1/host/jingles/random`
 - `GET /v1/host/ads/random`
 - `GET /v1/youtube/playlists/:playlistId`
@@ -343,3 +344,21 @@ Current reference points:
   default-client source experiment was reverted after failing the representative-track probe.
 
 For Vercel, promote the last known-good deployment from the dashboard or redeploy its commit. Backend and web rollbacks are independent; if a contract change requires both, roll the web back first, then Cloud Run. Rolling back to `00003-kvf` also removes the production Vercel origin and will break browser CORS.
+### Speech BGM canary (2026-08-14)
+
+The Android speech-BGM fallback is packaged in immutable image
+`asia-southeast1-docker.pkg.dev/mirai-melody-radio-rqjoki/radio-ai/radio-ai-backend:bgm-4a316a4a2d24`
+(Cloud Build `5b85934b-a512-469c-b74d-bd9b371ebe69`) and deployed as zero-traffic revision
+`radio-ai-backend-00019-fah`, tagged `bgm-canary`.
+
+Canary evidence:
+
+- `/health`: `200`; `/readyz`: `200` with the YouTube provider ready.
+- Unauthenticated `/v1/host/bgm`: `401`.
+- Authenticated `bytes=0-1023` BGM request: `206 audio/mpeg`, 1,024 bytes, total size 8,945,229 bytes.
+- YouTube control `dQw4w9WgXcQ`: `206 audio/webm`, 65,536-byte range.
+- Fresh default-quality probes for recently successful production IDs `AXnqkVTFUqY` and `QK8BUygFR1U`: `503 YOUTUBE_CHALLENGE`, including a retry after the five-minute circuit cooldown.
+
+The BGM image was therefore **not promoted**. Production remains 100% on
+`radio-ai-backend-00017-xas`; `radio-ai-backend-00019-fah` remains at 0% for diagnosis.
+Do not shift traffic until representative playlist audio returns `206` on a fresh revision.
