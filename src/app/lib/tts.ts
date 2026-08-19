@@ -13,8 +13,19 @@ export function configuredOpenRouterTtsModel(): string {
   return process.env.OPENROUTER_TTS_MODEL?.trim() || 'google/gemini-3.1-flash-tts-preview';
 }
 
+const TTS_PROVIDER_TIMEOUT_MS = 30_000;
+
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
+}
+
+export function shouldContinueTtsFallback(signal: AbortSignal | undefined, error: unknown): boolean {
+  return signal?.aborted !== true && !isAbortError(error);
+}
+
+function ttsAttemptSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(TTS_PROVIDER_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 // Gemini daily limit file tracking removed
@@ -29,17 +40,17 @@ export async function synthesize(
   if (apiKey) {
     // 1. Try Gemini 3.1 Flash TTS
     try {
-      return await synthesizeGeminiTts(text, 'gemini-3.1-flash-tts-preview', apiKey, kind, signal);
+      return await synthesizeGeminiTts(text, 'gemini-3.1-flash-tts-preview', apiKey, kind, ttsAttemptSignal(signal));
     } catch (err) {
-      if (isAbortError(err)) throw err;
+      if (!shouldContinueTtsFallback(signal, err)) throw err;
       console.warn('[tts] Gemini 3.1 Flash TTS failed, trying 2.5:', err);
     }
 
     // 2. Try Gemini 2.5 Flash TTS
     try {
-      return await synthesizeGeminiTts(text, 'gemini-2.5-flash-preview-tts', apiKey, kind, signal);
+      return await synthesizeGeminiTts(text, 'gemini-2.5-flash-preview-tts', apiKey, kind, ttsAttemptSignal(signal));
     } catch (err) {
-      if (isAbortError(err)) throw err;
+      if (!shouldContinueTtsFallback(signal, err)) throw err;
       console.warn('[tts] Gemini 2.5 Flash TTS failed, falling back:', err);
     }
   }
@@ -48,9 +59,9 @@ export async function synthesize(
   const openRouterApiKey = process.env.OPENROUTER_API_KEY;
   if (openRouterApiKey) {
     try {
-      return await synthesizeOpenRouterTts(text, kind, signal);
+      return await synthesizeOpenRouterTts(text, kind, ttsAttemptSignal(signal));
     } catch (err) {
-      if (isAbortError(err)) throw err;
+      if (!shouldContinueTtsFallback(signal, err)) throw err;
       console.warn('[tts] OpenRouter Gemini 3.1 Flash TTS failed, falling back:', err);
     }
   }
@@ -59,9 +70,9 @@ export async function synthesize(
   const sbv2Url = process.env.STYLE_BERT_VITS2_URL;
   if (sbv2Url) {
     try {
-      return await synthesizeStyleBertVits2(text, sbv2Url, language, signal);
+      return await synthesizeStyleBertVits2(text, sbv2Url, language, ttsAttemptSignal(signal));
     } catch (err) {
-      if (isAbortError(err)) throw err;
+      if (!shouldContinueTtsFallback(signal, err)) throw err;
       console.warn('[tts] Style-Bert-VITS2 failed, falling back:', err);
     }
   }

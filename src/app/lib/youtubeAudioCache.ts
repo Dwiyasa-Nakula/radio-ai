@@ -48,6 +48,13 @@ export function isYouTubeChallengeError(error: unknown): boolean {
     .join(' ');
   return /confirm you(?:'|’)?re not a bot|sign in to confirm|po token|provider is not available/i.test(message);
 }
+export function shouldTryNextYouTubeClient(error: unknown): boolean {
+  if (isYouTubeChallengeError(error)) return true;
+  const candidate = error as { code?: unknown; killed?: unknown; signal?: unknown; message?: unknown };
+  if (candidate?.killed === true || candidate?.code === 'ETIMEDOUT') return true;
+  const message = typeof candidate?.message === 'string' ? candidate.message : '';
+  return /timed out|timeout|signal SIGTERM|process terminated/i.test(message);
+}
 
 interface YoutubeDlPayload {
   url?: unknown;
@@ -236,9 +243,8 @@ async function resolveFresh(videoId: string, quality: AudioQuality, fallbackOrde
       extractionError = undefined;
       break;
     } catch (error) {
-      const challenged = isYouTubeChallengeError(error);
       extractionError = sanitizedExtractionError(error);
-      if (!challenged) break;
+      if (!shouldTryNextYouTubeClient(error)) break;
     }
   }
 

@@ -4,6 +4,7 @@ import { rankRadioStations } from '../../../src/app/lib/radioQuality';
 import {
   isYouTubeChallengeError,
   redactYouTubeProxyCredentials,
+  shouldTryNextYouTubeClient,
   youtubeCacheKey,
   youtubeExtractorArguments,
   youtubeFormatSelector,
@@ -90,6 +91,11 @@ test('YouTube bot and PO-token failures are classified as retryable challenges',
   assert.equal(isYouTubeChallengeError(new Error('Googlevideo 500')), false);
 });
 
+test('YouTube advances to the next client after extractor timeouts', () => {
+  assert.equal(shouldTryNextYouTubeClient({ killed: true, signal: 'SIGTERM' }), true);
+  assert.equal(shouldTryNextYouTubeClient(new Error('Command timed out after 30000ms')), true);
+  assert.equal(shouldTryNextYouTubeClient(new Error('invalid video ID')), false);
+});
 test('YouTube prefers the client whose proxy-bound media URL remains streamable', () => {
   assert.deepEqual(youtubePlayerClients(), ['android_vr', 'mweb']);
   assert.deepEqual(youtubePlayerClients(true), ['mweb', 'android_vr']);
