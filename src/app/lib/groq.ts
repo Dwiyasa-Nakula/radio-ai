@@ -119,6 +119,30 @@ export function configuredOpenAgenticModel(): string {
   return process.env.OPENAGENTIC_MODEL?.trim() || 'claude-sonnet-4.5-thinking';
 }
 
+export function configuredGroqModels(): { primary: string; fallback: string } {
+  return {
+    primary: process.env.GROQ_MODEL?.trim() || 'qwen/qwen3.6-27b',
+    fallback: process.env.GROQ_FALLBACK_MODEL?.trim() || 'openai/gpt-oss-120b',
+  };
+}
+
+export function groqReasoningEffort(model: string): 'none' | 'low' | undefined {
+  if (model.startsWith('qwen/')) return 'none';
+  if (model.startsWith('openai/gpt-oss-')) return 'low';
+  return undefined;
+}
+
+export function parseOpenAgenticResponse(body: string): string {
+  const jsonEnd = body.lastIndexOf('}');
+  if (jsonEnd < 0) throw new Error('OpenAgentic returned invalid JSON');
+  const data = JSON.parse(body.slice(0, jsonEnd + 1));
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) {
+    throw new Error('OpenAgentic returned no content');
+  }
+  return content.trim();
+}
+
 async function callGroq(
   systemPrompt: string,
   userPrompt: string,
@@ -126,8 +150,7 @@ async function callGroq(
 ): Promise<GroqResult> {
   const apiKey = process.env.GROQ_API_KEY;
 
-  const primaryModel = process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
-  const fallbackModel = 'llama-3.1-8b-instant';
+  const { primary: primaryModel, fallback: fallbackModel } = configuredGroqModels();
 
   if (apiKey) {
     // 1. Try primary Groq model
@@ -195,6 +218,7 @@ async function executeGroqRequest(
       ],
       temperature: 0.85,
       max_tokens: 900,
+      reasoning_effort: groqReasoningEffort(model),
     }),
     signal,
   });
@@ -241,12 +265,7 @@ async function executeOpenAgenticRequest(
     throw new Error(`OpenAgentic API ${res.status}: ${text.slice(0, 300)}`);
   }
 
-  const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('OpenAgentic returned no content');
-  }
-  return content.trim();
+  return parseOpenAgenticResponse(await res.text());
 }
 
 function appendChatterSong(

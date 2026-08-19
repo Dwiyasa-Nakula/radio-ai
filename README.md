@@ -23,7 +23,7 @@ A full-featured AI radio station web application that streams from YouTube playl
 
 ### 🎙 AI Radio Host & Live Broadcasts
 
-- **LLM Radio Scripting**: Groq-powered radio DJ prompts (`llama-3.3-70b-versatile`) generating Japanese and English station chatter.
+- **LLM Radio Scripting**: Groq-powered radio DJ prompts (`qwen/qwen3.6-27b`, with `openai/gpt-oss-120b` fallback) generating Japanese and English station chatter.
 - **Multi-Tier TTS Fallback Pipeline**: Google Gemini 3.1/2.5 Flash TTS → OpenRouter → Style-BERT-VITS2 → AnyVoiceLab.
 - **DuckDuckGo Song Trivia Grounding**: Web-researched song history, album details, award context, and artist background with strict hallucination and prompt-injection guards.
 - **DJ Memory & Immersion**: 10-song recent track memory and 5-announcement history for smooth DJ transitions, listener interaction prompts, and theme links.
@@ -54,7 +54,7 @@ A full-featured AI radio station web application that streams from YouTube playl
 - **Framework**: [Next.js 15](https://nextjs.org) (App Router) + [React 19](https://react.dev)
 - **Styling**: [Tailwind CSS v4](https://tailwindcss.com) + Vanilla CSS Design Tokens
 - **Audio & Media**: Native HTML5 `<audio>` Dual Decks + `music-metadata` + `yt-dlp` (`youtube-dl-exec`)
-- **AI & LLM**: [Groq](https://groq.com) (`llama-3.3-70b-versatile`)
+- **AI & LLM**: [Groq](https://groq.com) (`qwen/qwen3.6-27b`, with `openai/gpt-oss-120b` fallback)
 - **Speech Synthesis (TTS)**: Google Gemini API (Gemini 3.1/2.5 Flash TTS), OpenRouter.ai, Style-BERT-VITS2, AnyVoiceLab
 - **Live Data Feeds**: NHK News RSS, JMA Japan Weather API, TomTom Orbis Traffic Incidents API, Radio Browser API
 - **Virtualization & Storage**: `@tanstack/react-virtual`, File System Access API, IndexedDB
@@ -156,7 +156,8 @@ live radio, TTS, jingles, and ads do not depend on that YouTube extraction path.
 
    # AI Radio Host
    GROQ_API_KEY=your_groq_api_key_here
-   GROQ_MODEL=llama-3.3-70b-versatile
+   GROQ_MODEL=qwen/qwen3.6-27b
+   GROQ_FALLBACK_MODEL=openai/gpt-oss-120b
 
    # Google Gemini API TTS
    GEMINI_API_KEY=your_google_ai_studio_api_key_here
