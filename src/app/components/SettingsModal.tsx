@@ -338,7 +338,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     [
                       'fullShow',
                       'Full radio show',
-                      'Intro jingle -> music -> outro jingle -> previous-song discussion -> weather -> traffic -> news -> ad -> AnyVoice sponsor credit -> next-song discussion.',
+                      'Intro jingle -> music -> outro jingle -> weather -> traffic -> news -> ad -> AnyVoice sponsor credit -> one combined previous/next song discussion.',
                     ],
                     [
                       'classic',
@@ -388,6 +388,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     disabled={!voiceSettings.enabled}
                     onChange={(e) => updateVoiceSettings({ chatterEnabled: e.target.checked })}
                     className="w-5 h-5"
+                  />
+                </label>
+                <label className={`mt-3 flex items-center justify-between gap-3 ${voiceSettings.chatterEnabled ? '' : 'opacity-50'}`}>
+                  <span className="text-sm">
+                    Separate previous and next discussions
+                    <span className="block text-xs text-gray-400">
+                      Uses two AI/TTS calls in Full radio show. Off combines both songs into one lower-cost segment.
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={voiceSettings.separateSongDiscussions}
+                    disabled={!voiceSettings.enabled || !voiceSettings.chatterEnabled || voiceSettings.playOrder !== 'fullShow'}
+                    onChange={(event) => updateVoiceSettings({ separateSongDiscussions: event.target.checked })}
+                    className="h-5 w-5"
                   />
                 </label>
                 <label className={`block mt-3 ${voiceSettings.chatterEnabled ? '' : 'opacity-50'}`}>

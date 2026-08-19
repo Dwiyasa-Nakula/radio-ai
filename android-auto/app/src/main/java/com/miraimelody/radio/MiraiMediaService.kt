@@ -35,6 +35,8 @@ import com.miraimelody.radio.playback.NativeMediaCatalog
 import com.miraimelody.radio.playback.PlaybackResolver
 import com.miraimelody.radio.playback.PlaybackStatus
 import com.miraimelody.radio.playback.SpeechBgmSource
+import com.miraimelody.radio.playback.SpeechBgmAction
+import com.miraimelody.radio.playback.speechBgmAction
 import com.miraimelody.radio.playback.RadioPlaybackStatus
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
@@ -162,11 +164,17 @@ class MiraiMediaService : MediaLibraryService() {
             retryCount = 0
             val speech = mediaItem?.mediaMetadata?.extras
                 ?.getBoolean(NativeMediaCatalog.EXTRA_SPEECH, false) == true
-            if (speech) startSpeechBgm() else if (previousWasSpeech) stopSpeechBgm()
+            when (speechBgmAction(previousWasSpeech, speech)) {
+                SpeechBgmAction.START -> startSpeechBgm()
+                SpeechBgmAction.STOP -> stopSpeechBgm()
+                SpeechBgmAction.KEEP, SpeechBgmAction.NONE -> Unit
+            }
             previousWasSpeech = speech
             val music = mediaItem?.mediaMetadata?.extras
                 ?.getBoolean(NativeMediaCatalog.EXTRA_MUSIC, false) == true
-            normalizationProcessor.enabled = music && app.settings.current().audioNormalization
+            val settings = app.settings.current()
+            normalizationProcessor.enabled = music && settings.audioNormalization
+            normalizationProcessor.outputGain = if (speech) settings.speechGain else 1f
             if (music) prefetchNextCycle()
         }
 

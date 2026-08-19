@@ -179,6 +179,9 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
     fun updateChatterEnabled(value: Boolean) = task(null) {
         app.settings.updateChatterEnabled(value)
     }
+    fun updateSeparateSongDiscussions(value: Boolean) = task(null) {
+        app.settings.updateSeparateSongDiscussions(value)
+    }
 
     fun updateResearchedChatter(value: Boolean) = task(null) {
         app.settings.updateResearchedChatter(value)
@@ -229,6 +232,9 @@ class RadioViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateBgmVolume(value: Float) = task(null) {
         app.settings.updateBgmVolume(value)
+    }
+    fun updateSpeechGain(value: Float) = task(null) {
+        app.settings.updateSpeechGain(value)
     }
 
     fun updateClassicIntervals(values: List<Int>) = task("Classic schedule saved") {

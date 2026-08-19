@@ -7,6 +7,7 @@ import {
   youtubeCacheKey,
   youtubeExtractorArguments,
   youtubeFormatSelector,
+  youtubePlayerClients,
 } from '../../../src/app/lib/youtubeAudioCache';
 import type { RadioStation } from '../../../src/app/lib/types';
 
@@ -87,4 +88,9 @@ test('YouTube bot and PO-token failures are classified as retryable challenges',
   assert.equal(isYouTubeChallengeError(new Error("Sign in to confirm you're not a bot")), true);
   assert.equal(isYouTubeChallengeError({ stderr: 'PO Token provider is not available' }), true);
   assert.equal(isYouTubeChallengeError(new Error('Googlevideo 500')), false);
+});
+
+test('YouTube prefers the client whose proxy-bound media URL remains streamable', () => {
+  assert.deepEqual(youtubePlayerClients(), ['android_vr', 'mweb']);
+  assert.deepEqual(youtubePlayerClients(true), ['mweb', 'android_vr']);
 });

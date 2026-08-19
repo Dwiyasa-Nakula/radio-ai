@@ -31,8 +31,9 @@ import { fetchTopHeadlines } from '../../../src/app/lib/segments/news';
 import { researchSong } from '../../../src/app/lib/segments/songResearch';
 import { fetchTrafficIncidents } from '../../../src/app/lib/segments/traffic';
 import { fetchJapanWeather } from '../../../src/app/lib/segments/weatherJapan';
+import { segmentCachePolicy, TimedPromiseCache } from '../../../src/app/lib/segmentAudioCache';
 import { buildSponsorScript, sanitizeSponsorBrand } from '../../../src/app/lib/segments/sponsor';
-import { synthesize, synthesizeAnyVoice } from '../../../src/app/lib/tts';
+import { synthesize, synthesizeAnyVoice, type TtsResult } from '../../../src/app/lib/tts';
 import type { AnnouncerLanguage, RadioCountryCode, RadioStation, Track } from '../../../src/app/lib/types';
 import {
   configuredYoutubeProxyUrl,
@@ -69,6 +70,13 @@ const youtubeProviderUrl = process.env.YOUTUBE_PO_PROVIDER_URL?.trim().replace(/
 const youtubeProxyUrl = configuredYoutubeProxyUrl();
 const youtubeProxyAgent = youtubeProxyUrl ? new ProxyAgent(youtubeProxyUrl) : undefined;
 const youtubeCircuit = new YouTubeCircuitBreaker();
+
+interface GeneratedHostSegment {
+  result: GroqResult;
+  tts: TtsResult;
+}
+
+const hostSegmentCache = new TimedPromiseCache<GeneratedHostSegment>();
 
 const youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
 
@@ -235,21 +243,27 @@ async function buildSegmentScript(body: HostSegmentRequest, signal: AbortSignal)
       : body.discussionFocus === 'next'
         ? 'next'
         : 'transition';
-    const researchTarget = discussionFocus === 'previous' ? previousSong : nextSong;
+    const researchTargets = discussionFocus === 'previous'
+      ? previousSong ? [previousSong] : []
+      : discussionFocus === 'next'
+        ? [nextSong]
+        : [previousSong, nextSong].filter((song): song is SongInfo => Boolean(song));
 
-    if (body.researchedTrivia === true && researchTarget) {
-      const research = await researchSong({
-        title: researchTarget.title,
-        artist: researchTarget.artist,
-        album: researchTarget.album,
-        year: researchTarget.year,
-      });
-      if (research) {
-        researchTarget.sourceNotes = [researchTarget.sourceNotes, research]
-          .filter(Boolean)
-          .join('\n')
-          .slice(0, 4200);
-      }
+    if (body.researchedTrivia === true) {
+      await Promise.all(researchTargets.map(async (researchTarget) => {
+        const research = await researchSong({
+          title: researchTarget.title,
+          artist: researchTarget.artist,
+          album: researchTarget.album,
+          year: researchTarget.year,
+        });
+        if (research) {
+          researchTarget.sourceNotes = [researchTarget.sourceNotes, research]
+            .filter(Boolean)
+            .join('\n')
+            .slice(0, 4200);
+        }
+      }));
     }
 
     const currentTimeJst = new Intl.DateTimeFormat('ja-JP', {
@@ -405,7 +419,7 @@ app.use(cors({
     if (!origin || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && configuredOrigins.length === 0)) callback(null, true);
     else callback(new Error('Origin is not allowed'));
   },
-  exposedHeaders: ['X-Script', 'X-Tts-Provider', 'X-Llm-Model', 'X-Segment-Kind', 'X-Audio-Quality', 'X-Audio-Codec', 'X-Audio-Bitrate', 'X-Audio-Sample-Rate', 'X-Ad-File', 'X-Ad-Title', 'X-Ad-Thumbnail', 'X-Ad-YouTube-Id', 'X-Ad-Thumbnail-Url'],
+  exposedHeaders: ['X-Script', 'X-Tts-Provider', 'X-Llm-Model', 'X-Segment-Kind', 'X-Segment-Cache', 'X-Audio-Quality', 'X-Audio-Codec', 'X-Audio-Bitrate', 'X-Audio-Sample-Rate', 'X-Ad-File', 'X-Ad-Title', 'X-Ad-Thumbnail', 'X-Ad-YouTube-Id', 'X-Ad-Thumbnail-Url'],
   allowedHeaders: ['Authorization', 'Content-Type', 'Range'],
   methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
 }));
@@ -488,11 +502,22 @@ app.post('/v1/host/segments', authorize('host:generate'), async (request, respon
     body.brand = brand;
   }
 
-  try {
-    const result = await buildSegmentScript(body, signal);
+  const policy = segmentCachePolicy(body);
+  const generate = async (): Promise<GeneratedHostSegment> => {
+    const generationSignal = policy ? AbortSignal.timeout(120_000) : signal;
+    const result = await buildSegmentScript(body, generationSignal);
     const tts = body.kind === 'sponsor'
-      ? await synthesizeAnyVoice(result.script, body.language === 'en' ? 'en' : 'ja', signal)
-      : await synthesize(result.script, body.kind, signal, body.language === 'en' ? 'en' : 'ja');
+      ? await synthesizeAnyVoice(result.script, body.language === 'en' ? 'en' : 'ja', generationSignal)
+      : await synthesize(result.script, body.kind, generationSignal, body.language === 'en' ? 'en' : 'ja');
+    return { result, tts };
+  };
+
+  try {
+    const cached = policy
+      ? await hostSegmentCache.getOrCreate(policy.key, policy.ttlMs, generate)
+      : { value: await generate(), status: 'BYPASS' as const };
+    if (signal.aborted) return;
+    const { result, tts } = cached.value;
     response.set({
       'Content-Type': tts.contentType,
       'Content-Length': String(tts.audio.byteLength),
@@ -501,6 +526,7 @@ app.post('/v1/host/segments', authorize('host:generate'), async (request, respon
       'X-Tts-Provider': tts.provider,
       'X-Llm-Model': result.model,
       'X-Segment-Kind': body.kind,
+      'X-Segment-Cache': cached.status,
     });
     response.status(200).send(Buffer.from(tts.audio));
   } catch (error) {
@@ -516,7 +542,6 @@ app.post('/v1/host/segments', authorize('host:generate'), async (request, respon
     response.status(502).json({ error: 'Host segment generation failed' });
   }
 });
-
 app.get('/v1/youtube/playlists/:playlistId', authorize('youtube:read'), async (request, response) => {
   const playlistId = routeParam(request.params.playlistId);
   if (!PLAYLIST_ID_PATTERN.test(playlistId)) {

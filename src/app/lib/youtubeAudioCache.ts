@@ -155,6 +155,13 @@ export function youtubeCacheKey(videoId: string, quality: AudioQuality): string 
 
 type YouTubePlayerClient = 'mweb' | 'android_vr';
 
+export function youtubePlayerClients(fallbackOrder = false): YouTubePlayerClient[] {
+  const clients: YouTubePlayerClient[] = process.env.YOUTUBE_PO_PROVIDER_URL?.trim()
+    ? ['mweb', 'android_vr']
+    : ['android_vr', 'mweb'];
+  return fallbackOrder ? clients.reverse() : clients;
+}
+
 export function configuredYoutubeProxyUrl(): string | undefined {
   const raw = process.env.YOUTUBE_PROXY_URL?.trim();
   if (!raw) return undefined;
@@ -199,11 +206,11 @@ export function youtubeExtractorArguments(playerClient: YouTubePlayerClient = 'm
   ];
 }
 
-async function resolveFresh(videoId: string, quality: AudioQuality): Promise<ResolvedYouTubeAudio> {
+async function resolveFresh(videoId: string, quality: AudioQuality, fallbackOrder: boolean): Promise<ResolvedYouTubeAudio> {
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
   let stdout: string | undefined;
   let extractionError: unknown;
-  const clients: YouTubePlayerClient[] = ['mweb', 'android_vr'];
+  const clients = youtubePlayerClients(fallbackOrder);
 
   for (const playerClient of clients) {
     try {
@@ -304,7 +311,7 @@ export async function resolveYouTubeAudio(
     };
   }
 
-  const promise = resolveFresh(videoId, quality).finally(() => {
+  const promise = resolveFresh(videoId, quality, forceRefresh).finally(() => {
     if (state.inflight.get(key) === promise) {
       state.inflight.delete(key);
     }

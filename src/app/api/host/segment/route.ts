@@ -10,13 +10,14 @@ import {
   type GroqResult,
 } from '@/app/lib/groq';
 import type { AnnouncerLanguage } from '@/app/lib/types';
-import { synthesize, synthesizeAnyVoice } from '@/app/lib/tts';
+import { synthesize, synthesizeAnyVoice, type TtsResult } from '@/app/lib/tts';
 import { fetchTopHeadlines } from '@/app/lib/segments/news';
 import { fetchJapanWeather } from '@/app/lib/segments/weatherJapan';
 import { fetchTrafficIncidents } from '@/app/lib/segments/traffic';
 import { buildSponsorScript, sanitizeSponsorBrand } from '@/app/lib/segments/sponsor';
 import { researchSong } from '@/app/lib/segments/songResearch';
 import { legacyBackendApiEnabled } from '@/app/lib/localFilesystemGuard';
+import { segmentCachePolicy, TimedPromiseCache } from '@/app/lib/segmentAudioCache';
 
 interface ChatterBody {
   kind: 'chatter';
@@ -52,6 +53,13 @@ interface SponsorBody {
 
 type SegmentBody = ChatterBody | NewsBody | SimpleKindBody | SponsorBody;
 
+interface GeneratedSegment {
+  result: GroqResult;
+  tts: TtsResult;
+}
+
+const segmentCache = new TimedPromiseCache<GeneratedSegment>();
+
 function sanitizeSongInfo(value: SongInfo | undefined): SongInfo | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const title = typeof value.title === 'string' ? value.title.trim().slice(0, 240) : '';
@@ -86,25 +94,27 @@ async function buildScript(body: SegmentBody, signal: AbortSignal): Promise<Groq
       }
 
       const discussionFocus = body.discussionFocus ?? 'transition';
-      const researchTarget =
-        discussionFocus === 'previous' && body.previousSong
-          ? body.previousSong
-          : body.nextSong;
+      const researchTargets = discussionFocus === 'previous'
+        ? body.previousSong ? [body.previousSong] : []
+        : discussionFocus === 'next'
+          ? [body.nextSong]
+          : [body.previousSong, body.nextSong].filter((song): song is SongInfo => Boolean(song));
       if (body.researchedTrivia === true) {
-        const research = await researchSong({
-          title: researchTarget.title,
-          artist: researchTarget.artist,
-          album: researchTarget.album,
-          year: researchTarget.year,
-        });
-        if (research) {
-          researchTarget.sourceNotes = [researchTarget.sourceNotes, research]
-            .filter(Boolean)
-            .join('\n')
-            .slice(0, 4200);
-        }
+        await Promise.all(researchTargets.map(async (researchTarget) => {
+          const research = await researchSong({
+            title: researchTarget.title,
+            artist: researchTarget.artist,
+            album: researchTarget.album,
+            year: researchTarget.year,
+          });
+          if (research) {
+            researchTarget.sourceNotes = [researchTarget.sourceNotes, research]
+              .filter(Boolean)
+              .join('\n')
+              .slice(0, 4200);
+          }
+        }));
       }
-
       const currentTimeJst = new Intl.DateTimeFormat('ja-JP', {
         timeZone: 'Asia/Tokyo',
         hour: '2-digit',
@@ -245,43 +255,44 @@ export async function POST(request: Request) {
     });
   }
 
-  let result: GroqResult;
+  const policy = segmentCachePolicy(body);
+  const generate = async (): Promise<GeneratedSegment> => {
+    const generationSignal = policy ? AbortSignal.timeout(120_000) : request.signal;
+    const result = await buildScript(body, generationSignal);
+    const tts = body.kind === 'sponsor'
+      ? await synthesizeAnyVoice(result.script, body.language, generationSignal)
+      : await synthesize(result.script, body.kind, generationSignal, body.language);
+    return { result, tts };
+  };
+
   try {
     request.signal.throwIfAborted();
-    result = await buildScript(body, request.signal);
+    const cached = policy
+      ? await segmentCache.getOrCreate(policy.key, policy.ttlMs, generate)
+      : { value: await generate(), status: 'BYPASS' as const };
+    if (request.signal.aborted) return abortedResponse();
+    const { result, tts } = cached.value;
+
+    console.log(
+      `[host/segment ${body.kind}] ${cached.status.toLowerCase()} ${result.script.length}-char script via ${result.model}, ${tts.audio.byteLength} bytes via ${tts.provider}`
+    );
+
+    return new Response(new Uint8Array(tts.audio), {
+      headers: {
+        'Content-Type': tts.contentType,
+        'Content-Length': tts.audio.byteLength.toString(),
+        'Cache-Control': 'no-store',
+        'X-Script': encodeURIComponent(result.script),
+        'X-Tts-Provider': tts.provider,
+        'X-Llm-Model': result.model,
+        'X-Segment-Kind': body.kind,
+        'X-Segment-Cache': cached.status,
+      },
+    });
   } catch (err) {
     if (request.signal.aborted || isAbortError(err)) return abortedResponse();
     const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[host/segment ${body.kind}] script failed:`, message);
-    return NextResponse.json({ error: `Script error: ${message}` }, { status: 502 });
+    console.error(`[host/segment ${body.kind}] generation failed:`, message);
+    return NextResponse.json({ error: `Segment generation error: ${message}` }, { status: 502 });
   }
-
-  let tts;
-  try {
-    request.signal.throwIfAborted();
-    tts = body.kind === 'sponsor'
-      ? await synthesizeAnyVoice(result.script, body.language, request.signal)
-      : await synthesize(result.script, body.kind, request.signal, body.language);
-  } catch (err) {
-    if (request.signal.aborted || isAbortError(err)) return abortedResponse();
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error(`[host/segment ${body.kind}] TTS failed:`, message);
-    return NextResponse.json({ error: `TTS error: ${message}`, script: result.script }, { status: 502 });
-  }
-
-  console.log(
-    `[host/segment ${body.kind}] generated ${result.script.length}-char script via ${result.model}, ${tts.audio.byteLength} bytes via ${tts.provider}`
-  );
-
-  return new Response(new Uint8Array(tts.audio), {
-    headers: {
-      'Content-Type': tts.contentType,
-      'Content-Length': tts.audio.byteLength.toString(),
-      'Cache-Control': 'no-store',
-      'X-Script': encodeURIComponent(result.script),
-      'X-Tts-Provider': tts.provider,
-      'X-Llm-Model': result.model,
-      'X-Segment-Kind': body.kind,
-    },
-  });
 }

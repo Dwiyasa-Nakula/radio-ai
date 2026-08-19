@@ -178,6 +178,10 @@ export function loadHostSettings(): HostSettings {
         typeof parsed.chatterEnabled === 'boolean'
           ? parsed.chatterEnabled
           : DEFAULT_HOST_SETTINGS.chatterEnabled,
+      separateSongDiscussions:
+        typeof parsed.separateSongDiscussions === 'boolean'
+          ? parsed.separateSongDiscussions
+          : DEFAULT_HOST_SETTINGS.separateSongDiscussions,
       researchedChatter:
         typeof parsed.researchedChatter === 'boolean'
           ? parsed.researchedChatter

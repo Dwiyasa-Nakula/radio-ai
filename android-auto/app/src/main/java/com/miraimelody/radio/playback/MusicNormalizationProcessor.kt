@@ -1,4 +1,4 @@
-package com.miraimelody.radio.playback
+﻿package com.miraimelody.radio.playback
 
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -14,7 +14,8 @@ import kotlin.math.roundToInt
 @OptIn(UnstableApi::class)
 class MusicNormalizationProcessor : BaseAudioProcessor() {
     @Volatile var enabled: Boolean = false
-    private var gain = 1f
+    @Volatile var outputGain: Float = 1f
+    private var normalizationGain = 1f
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat =
         if (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT) {
@@ -26,8 +27,9 @@ class MusicNormalizationProcessor : BaseAudioProcessor() {
     override fun queueInput(inputBuffer: ByteBuffer) {
         val outputBuffer = replaceOutputBuffer(inputBuffer.remaining())
             .order(ByteOrder.nativeOrder())
-        if (!enabled) {
-            gain = 1f
+        val requestedOutputGain = outputGain.coerceIn(0.5f, 2f)
+        if (!enabled && requestedOutputGain == 1f) {
+            normalizationGain = 1f
             outputBuffer.put(inputBuffer)
             outputBuffer.flip()
             return
@@ -38,16 +40,21 @@ class MusicNormalizationProcessor : BaseAudioProcessor() {
         while (scan.remaining() >= Short.SIZE_BYTES) {
             peak = maxOf(peak, abs(scan.short.toInt()))
         }
-        val targetGain = if (peak == 0) {
-            1f
+        if (enabled) {
+            val targetGain = if (peak == 0) {
+                1f
+            } else {
+                (TARGET_PEAK / peak.toFloat()).coerceIn(MIN_GAIN, MAX_GAIN)
+            }
+            normalizationGain += (targetGain - normalizationGain) * SMOOTHING
         } else {
-            (TARGET_PEAK / peak.toFloat()).coerceIn(MIN_GAIN, MAX_GAIN)
+            normalizationGain = 1f
         }
-        gain += (targetGain - gain) * SMOOTHING
+        val appliedGain = (normalizationGain * requestedOutputGain).coerceIn(0.25f, 3f)
 
         inputBuffer.order(ByteOrder.nativeOrder())
         while (inputBuffer.remaining() >= Short.SIZE_BYTES) {
-            val normalized = (inputBuffer.short * gain).roundToInt()
+            val normalized = (inputBuffer.short * appliedGain).roundToInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
             outputBuffer.putShort(normalized.toShort())
         }
@@ -56,7 +63,7 @@ class MusicNormalizationProcessor : BaseAudioProcessor() {
     }
 
     override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
-        gain = 1f
+        normalizationGain = 1f
     }
 
     companion object {

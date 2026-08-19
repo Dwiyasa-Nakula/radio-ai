@@ -64,7 +64,7 @@ class PlaybackResolver(private val app: MiraiApplication) {
         val kind = uri.getQueryParameter("kind")?.take(24).orEmpty()
         val key = uri.getQueryParameter("key")?.take(240)
             ?: kind + ":" + encoded.take(64)
-        app.cache.get(key)?.let { return it }
+        app.cache.get(key, freshness(kind))?.let { return it }
         val payload = try {
             String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8)
         } catch (_: IllegalArgumentException) {
@@ -89,10 +89,16 @@ class PlaybackResolver(private val app: MiraiApplication) {
         }
     }
 
+    private fun freshness(kind: String): Long? = when (kind) {
+        "weather" -> 3L * 60L * 60L * 1000L
+        "news" -> 60L * 60L * 1000L
+        else -> null
+    }
+
     private fun stale(kind: String): File? = when (kind) {
-        "weather" -> app.cache.latest(kind, 6L * 60L * 60L * 1000L)
+        "weather" -> app.cache.latest(kind, 3L * 60L * 60L * 1000L)
         "traffic" -> app.cache.latest(kind, 2L * 60L * 60L * 1000L)
-        "news" -> app.cache.latest(kind, 2L * 60L * 60L * 1000L)
+        "news" -> app.cache.latest(kind, 60L * 60L * 1000L)
         else -> null
     }
 }

@@ -12,13 +12,22 @@ class AudioFileCache(
     private val directory = File(context.cacheDir, "native-radio-cache").apply { mkdirs() }
 
     @Synchronized
-    fun get(key: String): File? {
+    fun get(key: String, maxAgeMs: Long? = null): File? {
         val prefix = safePrefix(key) + "-" + digest(key)
-        return directory.listFiles()
+        val file = directory.listFiles()
             ?.firstOrNull { it.isFile && it.name.startsWith(prefix) && it.length() > 0 }
-            ?.also { it.setLastModified(System.currentTimeMillis()) }
+            ?: return null
+        val now = System.currentTimeMillis()
+        if (maxAgeMs != null) {
+            if (now - file.lastModified() >= maxAgeMs) {
+                file.delete()
+                return null
+            }
+            return file
+        }
+        file.setLastModified(now)
+        return file
     }
-
     @Synchronized
     fun put(key: String, contentType: String?, bytes: ByteArray): File {
         val target = File(directory, safePrefix(key) + "-" + digest(key) + extension(contentType))

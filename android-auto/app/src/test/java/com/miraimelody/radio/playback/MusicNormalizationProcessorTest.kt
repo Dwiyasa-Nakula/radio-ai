@@ -36,6 +36,23 @@ class MusicNormalizationProcessorTest {
         assertTrue(normalized.all { it in Short.MIN_VALUE..Short.MAX_VALUE })
     }
 
+    @Test
+    fun `speech output gain raises quiet PCM without enabling music normalization`() {
+        val processor = MusicNormalizationProcessor().apply {
+            enabled = false
+            outputGain = 1.4f
+        }
+        processor.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_16BIT))
+        processor.flush(AudioProcessor.StreamMetadata.DEFAULT)
+        val samples = shortArrayOf(4_000, -4_000, 8_000, -8_000)
+
+        processor.queueInput(pcm(samples))
+        val boosted = shorts(processor.output)
+
+        assertTrue(boosted.maxOf { kotlin.math.abs(it.toInt()) } > 8_000)
+        assertTrue(boosted.all { it in Short.MIN_VALUE..Short.MAX_VALUE })
+    }
+
     private fun pcm(samples: ShortArray): ByteBuffer =
         ByteBuffer.allocateDirect(samples.size * 2).order(ByteOrder.nativeOrder()).apply {
             samples.forEach(::putShort)

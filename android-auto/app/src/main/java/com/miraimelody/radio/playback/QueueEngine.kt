@@ -13,6 +13,7 @@ enum class SegmentType {
     MUSIC,
     OUTRO,
     PREVIOUS_DISCUSSION,
+    COMBINED_DISCUSSION,
     WEATHER,
     TRAFFIC,
     NEWS,
@@ -126,7 +127,7 @@ class ShowQueueBuilder<T>(
             outroBag.next(outros)?.let {
                 add(ScheduledEntry(SegmentType.OUTRO, track = current, nextTrack = next, media = it))
             }
-            if (settings.chatterEnabled) {
+            if (settings.chatterEnabled && settings.separateSongDiscussions) {
                 add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, current, next))
             }
             add(ScheduledEntry(SegmentType.WEATHER, current, next))
@@ -139,7 +140,17 @@ class ShowQueueBuilder<T>(
                 }
             }
             if (settings.chatterEnabled) {
-                add(ScheduledEntry(SegmentType.NEXT_DISCUSSION, current, next))
+                add(
+                    ScheduledEntry(
+                        if (settings.separateSongDiscussions) {
+                            SegmentType.NEXT_DISCUSSION
+                        } else {
+                            SegmentType.COMBINED_DISCUSSION
+                        },
+                        current,
+                        next,
+                    )
+                )
             }
         }
     }
@@ -189,7 +200,7 @@ class ShowQueueBuilder<T>(
                     add(ScheduledEntry(SegmentType.TRAFFIC, tracks[index - 1], current))
                 }
                 if (settings.chatterEnabled && songsPlayed due settings.frequency) {
-                    add(ScheduledEntry(SegmentType.PREVIOUS_DISCUSSION, tracks[index - 1], current))
+                    add(ScheduledEntry(SegmentType.COMBINED_DISCUSSION, tracks[index - 1], current))
                 }
                 if (useJinglePair) {
                     introBag.next(intros)?.let {

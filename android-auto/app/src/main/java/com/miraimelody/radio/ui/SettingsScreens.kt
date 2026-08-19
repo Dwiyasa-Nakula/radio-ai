@@ -143,6 +143,18 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
                     onCheckedChange = viewModel::updateChatterEnabled,
                 )
                 SettingSwitch(
+                    label = "Separate previous and next discussions",
+                    checked = settings.separateSongDiscussions,
+                    enabled = settings.hostEnabled && settings.chatterEnabled &&
+                        settings.broadcastMode == BroadcastMode.FULL_SHOW,
+                    onCheckedChange = viewModel::updateSeparateSongDiscussions,
+                )
+                Text(
+                    "Off uses one combined segment and one AI/TTS call. On preserves the legacy two-call Full Show layout.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = .65f),
+                )
+                SettingSwitch(
                     label = "Web-researched song trivia",
                     checked = settings.researchedChatter,
                     enabled = settings.hostEnabled && settings.chatterEnabled,
@@ -247,6 +259,17 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
         }
         item {
             SettingsCard("Speech background music") {
+                Text("Announcer gain: " + (settings.speechGain * 100).toInt() + "%")
+                Slider(
+                    value = settings.speechGain,
+                    onValueChange = viewModel::updateSpeechGain,
+                    valueRange = 1f..2f,
+                )
+                Text(
+                    "Boosts generated speech before Android and Android Auto output. Default 140%.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = .65f),
+                )
                 Text("BGM volume: " + (settings.bgmVolume * 100).toInt() + "%")
                 Slider(
                     value = settings.bgmVolume,
@@ -255,7 +278,7 @@ fun BroadcastSettingsScreen(viewModel: RadioViewModel) {
                 )
                 Text(
                     "Uses local BGM when selected, otherwise streams the station BGM with a packaged fallback. " +
-                        "Default 10% · 1.2s fade-in · 0.6s lead-in · 0.8s tail · 1.2s fade-out",
+                        "The BGM starts once and continues across consecutive announcer segments, stopping for jingles, ads, and songs. Default 10% · 1.2s fade-in · 0.6s lead-in · 0.8s tail · 1.2s fade-out",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = .65f),
                 )
@@ -352,7 +375,7 @@ fun ConnectionScreen(viewModel: RadioViewModel) {
                 )
                 Text(
                     "Least-recently-used generated speech and remote metadata. " +
-                        "News/traffic expire after 2 hours; weather after 6.",
+                        "News refreshes after 1 hour; weather after 3 hours. Traffic behavior is unchanged.",
                     color = Color.White.copy(alpha = .68f),
                 )
                 OutlinedButton(

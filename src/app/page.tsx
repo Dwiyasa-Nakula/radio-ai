@@ -154,8 +154,9 @@ function buildClassicRadioQueue(
 }
 
 /**
- * Full show cycle: intro, music, outro, previous-track discussion, weather,
- * traffic, news, mandatory folder ad + sponsor credit, next-track discussion, repeat.
+ * Full show cycle: intro, music, outro, weather, traffic, news, mandatory
+ * folder ad + sponsor credit, combined previous/next discussion, repeat.
+ * Split discussion mode preserves the legacy two-call layout.
  */
 function buildFullShowQueue(tracks: Track[], settings: HostSettings): RadioItem[] {
   if (!settings.enabled) {
@@ -174,7 +175,7 @@ function buildFullShowQueue(tracks: Track[], settings: HostSettings): RadioItem[
     items.push({ kind: 'song', id: `song:${cycleId}`, track });
     items.push({ kind: 'jingle', id: `outro:${cycleId}`, slot: 'outro' });
 
-    if (settings.chatterEnabled) {
+    if (settings.chatterEnabled && settings.separateSongDiscussions) {
       items.push({
         kind: 'chatter',
         id: `previous-discussion:${cycleId}`,
@@ -192,10 +193,10 @@ function buildFullShowQueue(tracks: Track[], settings: HostSettings): RadioItem[
     if (settings.chatterEnabled) {
       items.push({
         kind: 'chatter',
-        id: `next-discussion:${cycleId}`,
+        id: `${settings.separateSongDiscussions ? 'next' : 'combined'}-discussion:${cycleId}`,
         previousSong: track,
         nextSong: nextTrack,
-        discussionFocus: 'next',
+        discussionFocus: settings.separateSongDiscussions ? 'next' : 'transition',
       });
     }
   }

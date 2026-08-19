@@ -160,6 +160,7 @@ export interface HostSettings {
   enabled: boolean;
   playOrder: PlayOrder;
   chatterEnabled: boolean;
+  separateSongDiscussions: boolean;
   researchedChatter: boolean;
   frequency: number;
   newsEvery: number;
@@ -184,6 +185,7 @@ export const DEFAULT_HOST_SETTINGS: HostSettings = {
   enabled: true,
   playOrder: 'fullShow',
   chatterEnabled: true,
+  separateSongDiscussions: false,
   researchedChatter: true,
   frequency: 1,
   newsEvery: 0,

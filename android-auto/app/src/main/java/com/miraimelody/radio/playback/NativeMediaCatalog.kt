@@ -109,6 +109,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
         SegmentType.INTRO, SegmentType.OUTRO, SegmentType.AD ->
             playable(requireNotNull(entry.media))
         SegmentType.PREVIOUS_DISCUSSION,
+        SegmentType.COMBINED_DISCUSSION,
         SegmentType.WEATHER,
         SegmentType.TRAFFIC,
         SegmentType.NEWS,
@@ -125,7 +126,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
         val next = entry.nextTrack
         val language = if (settings.language == AnnouncerLanguage.ENGLISH) "en" else "ja"
         val kind = when (entry.type) {
-            SegmentType.PREVIOUS_DISCUSSION, SegmentType.NEXT_DISCUSSION -> "chatter"
+            SegmentType.PREVIOUS_DISCUSSION, SegmentType.COMBINED_DISCUSSION, SegmentType.NEXT_DISCUSSION -> "chatter"
             SegmentType.WEATHER -> "weather"
             SegmentType.TRAFFIC -> "traffic"
             SegmentType.NEWS -> "news"
@@ -134,7 +135,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
         }
         val payload = JSONObject().put("kind", kind).put("language", language)
         when (entry.type) {
-            SegmentType.PREVIOUS_DISCUSSION, SegmentType.NEXT_DISCUSSION -> {
+            SegmentType.PREVIOUS_DISCUSSION, SegmentType.COMBINED_DISCUSSION, SegmentType.NEXT_DISCUSSION -> {
                 payload.put(
                     "previousSong",
                     JSONObject()
@@ -151,7 +152,11 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
                 )
                 payload.put(
                     "discussionFocus",
-                    if (entry.type == SegmentType.PREVIOUS_DISCUSSION) "previous" else "next",
+                    when (entry.type) {
+                        SegmentType.PREVIOUS_DISCUSSION -> "previous"
+                        SegmentType.NEXT_DISCUSSION -> "next"
+                        else -> "transition"
+                    },
                 )
                 payload.put("listenerInteraction", settings.listenerInteractionEnabled)
                 payload.put("researchedTrivia", settings.researchedChatter)
@@ -193,6 +198,7 @@ class NativeMediaCatalog(private val app: MiraiApplication) {
             .build()
         val title = when (entry.type) {
             SegmentType.PREVIOUS_DISCUSSION -> "Previous Song Discussion"
+            SegmentType.COMBINED_DISCUSSION -> "Previous & Next Song Discussion"
             SegmentType.WEATHER -> "Weather & Temperature"
             SegmentType.TRAFFIC -> "Traffic"
             SegmentType.NEWS -> "News"

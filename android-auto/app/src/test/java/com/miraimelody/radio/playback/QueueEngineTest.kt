@@ -67,15 +67,14 @@ class QueueEngineTest {
                 SegmentType.INTRO,
                 SegmentType.MUSIC,
                 SegmentType.OUTRO,
-                SegmentType.PREVIOUS_DISCUSSION,
                 SegmentType.WEATHER,
                 SegmentType.TRAFFIC,
                 SegmentType.NEWS,
                 SegmentType.AD,
                 SegmentType.SPONSOR,
-                SegmentType.NEXT_DISCUSSION,
+                SegmentType.COMBINED_DISCUSSION,
             ),
-            result.take(10).map { it.type },
+            result.take(9).map { it.type },
         )
         assertEquals("Acme", result.first { it.type == SegmentType.SPONSOR }.sponsorBrand)
     }
@@ -94,15 +93,37 @@ class QueueEngineTest {
                 SegmentType.INTRO,
                 SegmentType.MUSIC,
                 SegmentType.OUTRO,
-                SegmentType.PREVIOUS_DISCUSSION,
                 SegmentType.WEATHER,
                 SegmentType.TRAFFIC,
                 SegmentType.NEWS,
-                SegmentType.NEXT_DISCUSSION,
+                SegmentType.COMBINED_DISCUSSION,
             ),
-            result.take(8).map { it.type },
+            result.take(7).map { it.type },
         )
         assertTrue(result.none { it.type == SegmentType.AD || it.type == SegmentType.SPONSOR })
+    }
+
+    @Test
+    fun fullShowCanKeepSongDiscussionsSeparate() {
+        val result = ShowQueueBuilder<String>(title = { it }).build(
+            tracks,
+            RadioSettings(
+                broadcastMode = BroadcastMode.FULL_SHOW,
+                adsEnabled = false,
+                separateSongDiscussions = true,
+            ),
+            intros,
+            outros,
+            ads,
+        )
+
+        assertEquals(
+            listOf(SegmentType.PREVIOUS_DISCUSSION, SegmentType.NEXT_DISCUSSION),
+            result.take(8).map { it.type }.filter {
+                it == SegmentType.PREVIOUS_DISCUSSION || it == SegmentType.NEXT_DISCUSSION
+            },
+        )
+        assertTrue(result.none { it.type == SegmentType.COMBINED_DISCUSSION })
     }
 
     @Test
@@ -133,7 +154,7 @@ class QueueEngineTest {
                 SegmentType.AD,
                 SegmentType.SPONSOR,
                 SegmentType.TRAFFIC,
-                SegmentType.PREVIOUS_DISCUSSION,
+                SegmentType.COMBINED_DISCUSSION,
                 SegmentType.INTRO,
                 SegmentType.MUSIC,
             ),

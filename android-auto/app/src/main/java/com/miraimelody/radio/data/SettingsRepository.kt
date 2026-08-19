@@ -31,6 +31,7 @@ data class RadioSettings(
     val backendUrl: String = "",
     val hostEnabled: Boolean = true,
     val chatterEnabled: Boolean = true,
+    val separateSongDiscussions: Boolean = false,
     val researchedChatter: Boolean = true,
     val newsFocus: String = "",
     val adsEnabled: Boolean = false,
@@ -49,6 +50,7 @@ data class RadioSettings(
     val jingleEvery: Int = 2,
     val adEvery: Int = 1,
     val bgmVolume: Float = 0.10f,
+    val speechGain: Float = 1.4f,
     val bgmFadeInMs: Long = 1_200,
     val bgmLeadInMs: Long = 600,
     val bgmTailMs: Long = 800,
@@ -62,6 +64,7 @@ class SettingsRepository(private val context: Context) {
         val backendUrl = stringPreferencesKey("backend-url")
         val hostEnabled = booleanPreferencesKey("host-enabled")
         val chatterEnabled = booleanPreferencesKey("chatter-enabled")
+        val separateSongDiscussions = booleanPreferencesKey("separate-song-discussions")
         val researchedChatter = booleanPreferencesKey("researched-chatter")
         val newsFocus = stringPreferencesKey("news-focus")
         val adsEnabled = booleanPreferencesKey("ads-enabled")
@@ -80,6 +83,7 @@ class SettingsRepository(private val context: Context) {
         val jingleEvery = intPreferencesKey("jingle-every")
         val adEvery = intPreferencesKey("ad-every")
         val bgmVolume = floatPreferencesKey("bgm-volume")
+        val speechGain = floatPreferencesKey("speech-gain")
         val bgmFadeInMs = longPreferencesKey("bgm-fade-in")
         val bgmLeadInMs = longPreferencesKey("bgm-lead-in")
         val bgmTailMs = longPreferencesKey("bgm-tail")
@@ -103,6 +107,8 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateHostEnabled(value: Boolean) = set(Keys.hostEnabled, value)
     suspend fun updateChatterEnabled(value: Boolean) = set(Keys.chatterEnabled, value)
+    suspend fun updateSeparateSongDiscussions(value: Boolean) =
+        set(Keys.separateSongDiscussions, value)
     suspend fun updateResearchedChatter(value: Boolean) = set(Keys.researchedChatter, value)
     suspend fun updateNewsFocus(value: String) = set(Keys.newsFocus, value.trim().take(160))
     suspend fun updateAdsEnabled(value: Boolean) = set(Keys.adsEnabled, value)
@@ -119,6 +125,10 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateLanguage(value: AnnouncerLanguage) = set(Keys.language, value.name)
     suspend fun updateBgmVolume(value: Float) {
         context.radioDataStore.edit { it[Keys.bgmVolume] = value.coerceIn(0f, 0.5f) }
+    }
+
+    suspend fun updateSpeechGain(value: Float) {
+        context.radioDataStore.edit { it[Keys.speechGain] = value.coerceIn(1f, 2f) }
     }
 
     suspend fun updateClassicIntervals(
@@ -151,6 +161,7 @@ class SettingsRepository(private val context: Context) {
         ),
         hostEnabled = values[Keys.hostEnabled] ?: true,
         chatterEnabled = values[Keys.chatterEnabled] ?: true,
+        separateSongDiscussions = values[Keys.separateSongDiscussions] ?: false,
         researchedChatter = values[Keys.researchedChatter] ?: true,
         newsFocus = (values[Keys.newsFocus] ?: "").trim().take(160),
         adsEnabled = values[Keys.adsEnabled] ?: false,
@@ -169,6 +180,7 @@ class SettingsRepository(private val context: Context) {
         jingleEvery = interval(values[Keys.jingleEvery] ?: 2),
         adEvery = (values[Keys.adEvery] ?: 1).coerceIn(1, 20),
         bgmVolume = (values[Keys.bgmVolume] ?: 0.10f).coerceIn(0f, 0.5f),
+        speechGain = (values[Keys.speechGain] ?: 1.4f).coerceIn(1f, 2f),
         bgmFadeInMs = values[Keys.bgmFadeInMs] ?: 1_200,
         bgmLeadInMs = values[Keys.bgmLeadInMs] ?: 600,
         bgmTailMs = values[Keys.bgmTailMs] ?: 800,
