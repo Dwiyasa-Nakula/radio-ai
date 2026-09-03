@@ -383,7 +383,7 @@ async function streamYoutubeAudio(request: Request, response: Response, videoId:
       invalidateYouTubeAudio(videoId, quality);
       return streamYoutubeAudio(request, response, videoId, quality, true);
     }
-    if (isYouTubeChallengeError(error) && !fallbackEntry) {
+    if (isYouTubeChallengeError(error) && !fallbackEntry && Boolean(process.env.YOUTUBE_FALLBACK_PROVIDER_URL?.trim())) {
       log('WARNING', 'youtube_fallback_attempt', { videoId, quality });
       const fallback = await resolveYouTubeAudioFallback(videoId, quality, requestSignal(request, response));
       return streamYoutubeAudio(request, response, videoId, quality, true, fallback);
@@ -405,7 +405,7 @@ async function streamYoutubeAudio(request: Request, response: Response, videoId:
     await upstream.body?.cancel().catch(() => undefined);
     invalidateYouTubeAudio(videoId, quality);
     if (!forceRefresh) return streamYoutubeAudio(request, response, videoId, quality, true);
-    if (!fallbackEntry) {
+    if (!fallbackEntry && Boolean(process.env.YOUTUBE_FALLBACK_PROVIDER_URL?.trim())) {
       log('WARNING', 'youtube_fallback_attempt', { videoId, quality });
       const fallback = await resolveYouTubeAudioFallback(videoId, quality, requestSignal(request, response));
       return streamYoutubeAudio(request, response, videoId, quality, true, fallback);

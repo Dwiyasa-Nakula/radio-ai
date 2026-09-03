@@ -129,3 +129,16 @@ test('fallback provider responses are authenticated and expiry-validated', async
     else process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN = originalToken;
   }
 });
+
+test('fallback provider throws when YOUTUBE_FALLBACK_PROVIDER_URL is unset', async () => {
+  const originalUrl = process.env.YOUTUBE_FALLBACK_PROVIDER_URL;
+  delete process.env.YOUTUBE_FALLBACK_PROVIDER_URL;
+  try {
+    await assert.rejects(
+      resolveYouTubeAudioFallback('abcdefghijk', 'balanced'),
+      /YouTube fallback provider is not configured/
+    );
+  } finally {
+    if (originalUrl !== undefined) process.env.YOUTUBE_FALLBACK_PROVIDER_URL = originalUrl;
+  }
+});
