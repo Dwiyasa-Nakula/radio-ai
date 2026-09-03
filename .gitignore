@@ -72,3 +72,11 @@ next-env.d.ts
 /android-auto/*.aab
 /android-auto/*.jks
 /android-auto/keystore.properties
+
+/public/sponsor-credits/*
+!/public/sponsor-credits/.gitkeep
+!/public/sponsor-credits/ja/
+/public/sponsor-credits/ja/*
+!/public/sponsor-credits/ja/.gitkeep
+
+handover.md

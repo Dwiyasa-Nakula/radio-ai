@@ -28,7 +28,7 @@ test('ad titles prefer matching sidecars and fall back to the filename', async (
   }));
   const northEntries = ['north-star.mp4', 'north-star.png', 'north-star.json'];
   const fromJson = await resolveAdMetadata(directory, 'north-star.mp4', northEntries);
-  assert.deepEqual(fromJson, { title: 'North Star Foods', hasThumbnail: true });
+  assert.deepEqual(fromJson, { title: 'North Star Foods', sponsor: 'North Star Foods', hasThumbnail: true });
 
   await writeFile(join(directory, 'legacy-sponsor.mp4'), '');
   await writeFile(join(directory, 'legacy-sponsor.json'), JSON.stringify({ brand: 'Ignored alias' }));

@@ -36,10 +36,6 @@ export function localLibraryCacheKey(source: LocalLibrarySource): string {
   return playlist.path?.trim() || DEFAULT_LIBRARY_KEY;
 }
 
-function localLibraryUrl(path?: string): string {
-  const normalized = path?.trim();
-  return normalized ? `/api/local/list?path=${encodeURIComponent(normalized)}` : '/api/local/list';
-}
 
 function emitLocalLibraryChange(key: string) {
   for (const listener of listeners.get(key) ?? []) listener();
@@ -89,13 +85,7 @@ export function preloadLocalLibrary(
   const promise = (
     playlist.localMode === 'browser' || playlist.localMode === 'input'
       ? scanBrowserPlaylist(playlist, options)
-      : fetch(localLibraryUrl(playlist.path)).then(async (response) => {
-          if (!response.ok) {
-            const body = await response.json().catch(() => ({}));
-            throw new Error(body.error ?? `Local scan failed: ${response.status}`);
-          }
-          return response.json() as Promise<Track[]>;
-        })
+      : Promise.reject(new Error('This playlist uses a server folder. Reconnect it using the browser folder or file picker in Settings.'))
   )
     .then((tracks) => {
       if (!Array.isArray(tracks)) throw new Error('Local scan returned invalid data');

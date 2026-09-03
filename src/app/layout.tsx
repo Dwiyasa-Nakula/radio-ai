@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "mirAI melody 73.9 FM",
   description: "A web application for Radio with by AI radio personality.",
+  icons: {
+    icon: "/Logo/favicon_io/favicon.ico",
+    apple: "/Logo/favicon_io/apple-touch-icon.png",
+  },
+
 };
 
 export default function RootLayout({

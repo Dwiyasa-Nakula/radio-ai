@@ -8,9 +8,11 @@
     "build": "esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.mjs --packages=external",
     "start": "node dist/server.mjs",
     "test": "tsx --test src/*.test.ts",
+    "generate:sponsor-credits": "tsx src/generateSponsorCredits.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.22.0",
     "@langchain/community": "^1.1.29",
     "@langchain/core": "^1.2.3",
     "@radio-ai/contracts": "0.1.0",

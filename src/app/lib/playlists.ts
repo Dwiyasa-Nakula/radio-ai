@@ -255,7 +255,7 @@ export function loadPlaybackSettings(): PlaybackSettings {
       audioQuality:
         parsed.audioQuality === 'balanced' || parsed.audioQuality === 'dataSaver'
           ? parsed.audioQuality
-          : 'high',
+          : 'balanced',
     };
   } catch {
     return DEFAULT_PLAYBACK_SETTINGS;

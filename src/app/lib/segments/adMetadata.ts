@@ -14,16 +14,19 @@ const MAX_METADATA_CACHE_ENTRIES = 64;
 interface EmbeddedMetadata {
   signature: string;
   title: string;
+  sponsor: string;
   thumbnail?: AdThumbnail;
 }
 
 interface JsonMetadata {
   title: string;
+  sponsor: string;
   thumbnailFileName?: string;
 }
 
 export interface AdMetadata {
   title: string;
+  sponsor: string;
   hasThumbnail: boolean;
 }
 
@@ -57,11 +60,12 @@ export function adTitleFromFileName(fileName: string): string {
 async function readJsonMetadata(filePath: string): Promise<JsonMetadata> {
   const parsed = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { title: '' };
+    return { title: '', sponsor: '' };
   }
   const metadata = parsed as Record<string, unknown>;
   return {
     title: cleanTitle(metadata.title),
+    sponsor: cleanTitle(metadata.sponsor),
     thumbnailFileName: cleanThumbnailFileName(metadata.thumbnail),
   };
 }
@@ -73,10 +77,12 @@ async function readEmbeddedMetadata(filePath: string): Promise<EmbeddedMetadata>
   if (cached?.signature === signature) return cached;
 
   let title = '';
+  let sponsor = '';
   let thumbnail: AdThumbnail | undefined;
   try {
     const metadata = await parseFile(filePath, { duration: false });
     title = cleanTitle(metadata.common.title);
+    sponsor = cleanTitle(metadata.common.artist);
     const picture = metadata.common.picture?.find(
       (candidate) => candidate.data.length > 0 && candidate.format.startsWith('image/')
     );
@@ -85,7 +91,7 @@ async function readEmbeddedMetadata(filePath: string): Promise<EmbeddedMetadata>
     }
   } catch {}
 
-  const value = { signature, title, thumbnail };
+  const value = { signature, title, sponsor, thumbnail };
   embeddedCache.delete(filePath);
   embeddedCache.set(filePath, value);
   while (embeddedCache.size > MAX_METADATA_CACHE_ENTRIES) {
@@ -113,7 +119,7 @@ async function sidecarMetadata(
     return parsed.name.toLocaleLowerCase() === stem.toLocaleLowerCase() && Boolean(IMAGE_CONTENT_TYPES[parsed.ext.toLowerCase()]);
   });
 
-  let json: JsonMetadata = { title: '' };
+  let json: JsonMetadata = { title: '', sponsor: '' };
   if (jsonFile) {
     try { json = await readJsonMetadata(join(directory, jsonFile)); } catch {}
   }
@@ -138,6 +144,7 @@ export async function resolveAdMetadata(
   const explicitThumbnail = entryByName(directoryEntries, sidecars.json.thumbnailFileName);
   return {
     title: sidecars.json.title || embedded.title || adTitleFromFileName(mediaFileName),
+    sponsor: sidecars.json.sponsor || embedded.sponsor || sidecars.json.title || embedded.title || adTitleFromFileName(mediaFileName),
     hasThumbnail: Boolean(explicitThumbnail || embedded.thumbnail || sidecars.automaticThumbnail),
   };
 }

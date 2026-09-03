@@ -4,7 +4,6 @@
 import React, { useEffect, useState } from 'react';
 import type { HostSettings, PlaybackSettings, SavedLocalPlaylist, SavedPlaylist } from '../lib/types';
 import { extractPlaylistId } from '../lib/playlists';
-import { loadLocalDirectory } from '../lib/localBrowseClient';
 import LocalPlaylistEditor from './LocalPlaylistEditor';
 import {
   pickAndStoreDirectory,
@@ -57,39 +56,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [tab, setTab] = useState<AddTab>('youtube');
   const [name, setName] = useState('');
   const [urlOrId, setUrlOrId] = useState('');
-  const [folderPath, setFolderPath] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [voiceSettings, setVoiceSettings] = useState(hostSettings);
   const [voiceSettingsDirty, setVoiceSettingsDirty] = useState(false);
   const [playbackDraft, setPlaybackDraft] = useState(playbackSettings);
   const [playbackDirty, setPlaybackDirty] = useState(false);
   const [addingLocal, setAddingLocal] = useState(false);
-
-  const [showExplorer, setShowExplorer] = useState(false);
-  const [explorerCurrentPath, setExplorerCurrentPath] = useState<string | null>(null);
-  const [explorerSubdirs, setExplorerSubdirs] = useState<Array<{ name: string; path: string }>>([]);
-  const [explorerParent, setExplorerParent] = useState<string | null>(null);
-  const [explorerLoading, setExplorerLoading] = useState(false);
   const [editingLocalId, setEditingLocalId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection>('broadcast');
 
-  const loadExplorerPath = (pathString: string | null) => {
-    setExplorerLoading(true);
-    setError(null);
-    loadLocalDirectory(pathString)
-      .then((data) => {
-        setExplorerCurrentPath(data.path);
-        setExplorerSubdirs(data.subdirs || []);
-        setExplorerParent(data.parent);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to list folders');
-        console.warn('Settings modal error:', err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        setExplorerLoading(false);
-      });
-  };
 
   useEffect(() => {
     if (!open) return;
@@ -97,10 +72,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setVoiceSettingsDirty(false);
     setPlaybackDraft(playbackSettings);
     setPlaybackDirty(false);
-    setShowExplorer(false);
-    setExplorerCurrentPath(null);
-    setExplorerSubdirs([]);
-    setExplorerParent(null);
   }, [open, hostSettings, playbackSettings]);
 
   useEffect(() => {
@@ -144,26 +115,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setUrlOrId('');
   };
 
-  const handleAddLocal = () => {
-    setError(null);
-    if (!folderPath.trim()) {
-      setError('Enter a folder path.');
-      return;
-    }
-    if (!name.trim()) {
-      setError('Give the folder a name.');
-      return;
-    }
-    onAdd({
-      id: `local:${Date.now()}`,
-      name: name.trim(),
-      type: 'local',
-      path: folderPath.trim(),
-      localMode: 'server',
-    });
-    setName('');
-    setFolderPath('');
-  };
 
   const handleAddBrowserLocal = async () => {
     setError(null);
@@ -214,6 +165,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     } finally {
       setAddingLocal(false);
       event.target.value = '';
+    }
+  };
+
+  const handleReconnectSessionFiles = async (event: React.ChangeEvent<HTMLInputElement>, playlist: SavedLocalPlaylist) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+    setError(null);
+    setAddingLocal(true);
+    const directoryId = 'session:' + crypto.randomUUID();
+    try {
+      const entry: SavedLocalPlaylist = { ...playlist, path: undefined, localMode: 'input', directoryHandleId: directoryId };
+      const tracks = await registerSessionDirectoryFiles(directoryId, files);
+      primeLocalLibrary(entry, tracks);
+      onUpdate(entry);
+    } catch (reconnectError) {
+      setError(reconnectError instanceof Error ? reconnectError.message : 'Could not read selected files');
+    } finally {
+      setAddingLocal(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleReconnectLocal = async (playlist: SavedLocalPlaylist) => {
+    setError(null);
+    setAddingLocal(true);
+    const directoryId = 'directory:' + crypto.randomUUID();
+    try {
+      const handle = await pickAndStoreDirectory(directoryId);
+      const entry: SavedLocalPlaylist = {
+        ...playlist,
+        path: undefined,
+        localMode: 'browser',
+        directoryHandleId: directoryId,
+        name: playlist.name || handle.name,
+      };
+      const tracks = await scanBrowserPlaylist(entry, { requestPermission: true });
+      primeLocalLibrary(entry, tracks);
+      onUpdate(entry);
+    } catch (reconnectError) {
+      if (!(reconnectError instanceof DOMException && reconnectError.name === 'AbortError')) {
+        setError(reconnectError instanceof Error ? reconnectError.message : 'Could not reconnect local folder');
+      }
+    } finally {
+      setAddingLocal(false);
     }
   };
 
@@ -727,9 +722,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                               ? 'Local / persistent browser folder'
                               : p.localMode === 'input'
                                 ? 'Local / session-only browser folder'
-                                : p.path
-                              ? `Local · ${p.path}`
-                              : 'Local · (LOCAL_MUSIC_DIR)'}
+                                : 'Local / reconnect required'}
                       </div>
                       {p.type === 'local' && Array.isArray(p.includedTrackIds) && (
                         <div className="mt-1 text-[11px] text-cyan-300">
@@ -738,6 +731,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       )}
                     </button>
                     <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                      {p.type === 'local' && p.localMode !== 'browser' && p.localMode !== 'input' && (
+                        supportsPersistentDirectoryPicker() ? (
+                          <button
+                            type="button"
+                            disabled={addingLocal}
+                            onClick={() => void handleReconnectLocal(p)}
+                            className="rounded-lg bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25 disabled:text-gray-500 text-left sm:text-center"
+                          >
+                            {addingLocal ? 'Reconnecting...' : 'Reconnect folder'}
+                          </button>
+                        ) : (
+                          <label className="cursor-pointer rounded-lg bg-amber-500/15 px-3 py-1.5 text-sm text-amber-100 hover:bg-amber-500/25 text-left sm:text-center">
+                            Reconnect files
+                            <input
+                              type="file"
+                              multiple
+                              accept="audio/*,.flac,.m4a,.opus,.webm"
+                              onChange={(event) => void handleReconnectSessionFiles(event, p)}
+                              className="sr-only"
+                              {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+                            />
+                          </label>
+                        )
+                      )}
                       {p.type === 'local' && (
                         <button
                           type="button"
@@ -883,7 +900,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="rounded-xl border border-cyan-300/20 bg-cyan-950/20 p-4">
                   <h4 className="text-sm font-semibold text-cyan-100">Browser folder access</h4>
                   <p className="mt-1 text-xs text-gray-400">
-                    Recommended for Vercel. Scans every MP3 and supported audio file under the selected root, including all nested folders, and stores a read-only handle in this browser; no audio, paths, or artwork are uploaded.
+                    Choose music from this laptop or phone. Files stay on this device and are never uploaded.
                   </p>
                   {supportsPersistentDirectoryPicker() ? (
                     <button
@@ -909,107 +926,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                   {!supportsPersistentDirectoryPicker() && (
                     <p className="mt-2 text-xs text-amber-300">
-                      This browser cannot persist a directory handle. You must choose the folder again after every refresh.
+                      This browser cannot persist folder access; choose the folder again after a refresh.
                     </p>
                   )}
                 </div>
-
-                <div className="flex items-center gap-3 py-1 text-[11px] uppercase tracking-wide text-gray-500">
-                  <span className="h-px flex-1 bg-white/10" />
-                  Local development / self-hosting
-                  <span className="h-px flex-1 bg-white/10" />
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Absolute folder path (e.g. D:\Music\Lo-fi)"
-                    value={folderPath}
-                    onChange={(e) => setFolderPath(e.target.value)}
-                    className="flex-grow bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowExplorer(true);
-                      loadExplorerPath(folderPath.trim() || null);
-                    }}
-                    className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold py-2 px-3 rounded shrink-0"
-                  >
-                    Browse
-                  </button>
-                </div>
-                {showExplorer && (
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-3 mt-2 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-gray-300">
-                      <span className="truncate max-w-full sm:max-w-[60%] font-mono bg-black/20 px-2 py-1 rounded">
-                        Folder: {explorerCurrentPath || 'Drives'}
-                      </span>
-                      <div className="flex gap-2 shrink-0 justify-end">
-                        {explorerParent !== undefined && (
-                          <button
-                            type="button"
-                            onClick={() => loadExplorerPath(explorerParent)}
-                            className="bg-gray-800 hover:bg-gray-700 px-2.5 py-1 rounded text-[11px]"
-                          >
-                            Up ↱
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (explorerCurrentPath) {
-                              setFolderPath(explorerCurrentPath);
-                            }
-                            setShowExplorer(false);
-                          }}
-                          className="bg-green-600 hover:bg-green-500 text-white px-2.5 py-1 rounded text-[11px]"
-                          disabled={!explorerCurrentPath}
-                        >
-                          Select ✓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowExplorer(false)}
-                          className="bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1 rounded text-[11px]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-
-                    {explorerLoading ? (
-                      <p className="text-xs text-gray-400 text-center py-4">Reading directories...</p>
-                    ) : (
-                      <ul className="max-h-[180px] overflow-y-auto divide-y divide-white/5 border border-white/5 rounded-lg bg-black/10 text-xs">
-                        {explorerSubdirs.length === 0 ? (
-                          <li className="p-3 text-center text-gray-500">No subdirectories found.</li>
-                        ) : (
-                          explorerSubdirs.map((dir) => (
-                            <li key={dir.path}>
-                              <button
-                                type="button"
-                                onClick={() => loadExplorerPath(dir.path)}
-                                className="w-full text-left p-2.5 hover:bg-white/5 truncate font-mono flex items-center gap-1.5"
-                              >
-                                📁 {dir.name}
-                              </button>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    )}
-                  </div>
-                )}
                 {error && <p className="text-red-400 text-sm mt-1">{error}</p>}
-                <button
-                  onClick={handleAddLocal}
-                  className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold py-2 px-4 rounded"
-                >
-                  Add server path
-                </button>
-                <p className="text-xs text-gray-500">
-                  Server paths work only when the Next.js process can read that machine. They are intentionally unavailable on Vercel.
-                </p>
               </div>
             )}
           </section>

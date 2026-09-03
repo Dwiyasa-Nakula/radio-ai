@@ -50,7 +50,7 @@ export async function backendFetch(
     return await fetch(`${session.baseUrl}${path}`, {
       ...init,
       headers: mergeHeaders(init.headers, session.token),
-      cache: 'no-store',
+      cache: init.cache ?? 'no-store',
     });
   } catch (error) {
     if (!fallbackPath) throw error;

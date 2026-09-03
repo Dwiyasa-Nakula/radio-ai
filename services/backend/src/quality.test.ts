@@ -9,6 +9,7 @@ import {
   youtubeExtractorArguments,
   youtubeFormatSelector,
   youtubePlayerClients,
+  resolveYouTubeAudioFallback,
 } from '../../../src/app/lib/youtubeAudioCache';
 import type { RadioStation } from '../../../src/app/lib/types';
 
@@ -99,4 +100,32 @@ test('YouTube advances to the next client after extractor timeouts', () => {
 test('YouTube prefers the client whose proxy-bound media URL remains streamable', () => {
   assert.deepEqual(youtubePlayerClients(), ['android_vr', 'mweb']);
   assert.deepEqual(youtubePlayerClients(true), ['mweb', 'android_vr']);
+});
+test('fallback provider responses are authenticated and expiry-validated', async () => {
+  const originalUrl = process.env.YOUTUBE_FALLBACK_PROVIDER_URL;
+  const originalToken = process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN;
+  const originalFetch = globalThis.fetch;
+  process.env.YOUTUBE_FALLBACK_PROVIDER_URL = 'https://resolver.example.com/';
+  process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN = 'secret-token';
+  let request: Request | undefined;
+  globalThis.fetch = async (input, init) => {
+    request = new Request(input, init);
+    return new Response(JSON.stringify({
+      url: 'https://media.example.com/audio.mp4',
+      contentType: 'audio/mp4',
+      expiresAt: new Date(Date.now() + 120_000).toISOString(),
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const entry = await resolveYouTubeAudioFallback('abcdefghijk', 'balanced');
+    assert.equal(entry.url, 'https://media.example.com/audio.mp4');
+    assert.equal(request?.headers.get('authorization'), 'Bearer secret-token');
+    assert.deepEqual(await request?.json(), { videoId: 'abcdefghijk', quality: 'balanced' });
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.YOUTUBE_FALLBACK_PROVIDER_URL;
+    else process.env.YOUTUBE_FALLBACK_PROVIDER_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN;
+    else process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN = originalToken;
+  }
 });

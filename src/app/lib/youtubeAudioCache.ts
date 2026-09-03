@@ -339,3 +339,57 @@ export function invalidateYouTubeAudio(videoId: string, quality?: AudioQuality):
     if (key.startsWith(`${videoId}:`)) state.entries.delete(key);
   }
 }
+
+export async function resolveYouTubeAudioFallback(
+  videoId: string,
+  quality: AudioQuality,
+  signal: AbortSignal = AbortSignal.timeout(20_000)
+): Promise<ResolvedYouTubeAudio> {
+  const baseUrl = process.env.YOUTUBE_FALLBACK_PROVIDER_URL?.trim().replace(/\/$/, '');
+  if (!baseUrl) throw new Error('YouTube fallback provider is not configured');
+  const endpoint = new URL('/v1/resolve', baseUrl);
+  if (endpoint.protocol !== 'https:') throw new Error('YOUTUBE_FALLBACK_PROVIDER_URL must use HTTPS');
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = process.env.YOUTUBE_FALLBACK_PROVIDER_TOKEN?.trim();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ videoId, quality }),
+    signal,
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error(`Fallback provider returned HTTP ${response.status}`);
+  const body = await response.json() as {
+    url?: unknown;
+    contentType?: unknown;
+    expiresAt?: unknown;
+    requestHeaders?: unknown;
+    contentLength?: unknown;
+    codec?: unknown;
+    bitrate?: unknown;
+    sampleRate?: unknown;
+  };
+  if (typeof body.url !== 'string') throw new Error('Fallback provider returned no media URL');
+  const mediaUrl = new URL(body.url);
+  if (mediaUrl.protocol !== 'https:') throw new Error('Fallback provider returned a non-HTTPS media URL');
+  const expiresAt = typeof body.expiresAt === 'string' ? Date.parse(body.expiresAt) : Number(body.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + 30_000) {
+    throw new Error('Fallback provider returned an expired media URL');
+  }
+  return {
+    videoId,
+    url: mediaUrl.toString(),
+    contentType: typeof body.contentType === 'string' && body.contentType.startsWith('audio/') ? body.contentType : 'audio/mp4',
+    contentLength: finitePositive(body.contentLength),
+    duration: undefined,
+    requestHeaders: sanitizeHeaders(body.requestHeaders),
+    resolvedAt: Date.now(),
+    expiresAt,
+    quality,
+    codec: typeof body.codec === 'string' ? body.codec : undefined,
+    bitrate: finitePositive(body.bitrate),
+    sampleRate: finitePositive(body.sampleRate),
+    lossless: false,
+  };
+}

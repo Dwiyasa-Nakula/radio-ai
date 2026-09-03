@@ -203,5 +203,5 @@ export const DEFAULT_HOST_SETTINGS: HostSettings = {
 };
 
 export const DEFAULT_PLAYBACK_SETTINGS: PlaybackSettings = {
-  audioQuality: 'high',
+  audioQuality: 'balanced',
 };

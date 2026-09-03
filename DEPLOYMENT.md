@@ -95,10 +95,11 @@ All YouTube-resolution and DuckDuckGo research caches are disposable in-memory L
 4. Generate at least 32 random bytes for `BACKEND_SESSION_SECRET`. Store the identical value in Vercel and Secret Manager. Never expose it as a `NEXT_PUBLIC_*` variable.
    Generate one personal Android enrollment credential and store only its lowercase SHA-256 hash in the comma-separated `MOBILE_DEVICE_CREDENTIAL_HASHES` secret. Set `BACKEND_PUBLIC_URL` to the canonical Cloud Run/custom-domain URL.
 5. Create a runtime service account with Secret Manager accessor on only the backend secrets.
-6. For GitHub deployment, create a separate deployer service account with Cloud Run admin, Artifact Registry writer, and Service Usage Consumer. Grant it Service Account User on the runtime identity; do not use it as the runtime identity.
-7. Configure a GitHub Workload Identity Federation provider restricted to `Dwiyasa-Nakula/radio-ai` and `refs/heads/main`.
-8. Add these GitHub Actions secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT`.
-9. Set GitHub Actions variable `VERCEL_ALLOWED_ORIGINS` to `https://radio-ai-three.vercel.app`. Add preview origins only when they are deliberately enabled; never use `*`.
+6. Create a private uniform-access Cloud Storage bucket for generated sponsor credits (for example `radio-ai-sponsor-credits-<project-id>`), grant the runtime service account `roles/storage.objectCreator` and `roles/storage.objectViewer`, and set `SPONSOR_AUDIO_BUCKET` to that bucket name. The service stores unknown Japanese sponsor clips under `v1/<sha256>.mp3` and reuses them on later requests. Generate the four bundled clips after setting AnyVoiceLab secrets with `npm run generate:sponsor-credits --workspace @radio-ai/backend`; commit the resulting `public/sponsor-credits/ja/*.mp3` files so known brands never call TTS.
+7. For GitHub deployment, create a separate deployer service account with Cloud Run admin, Artifact Registry writer, and Service Usage Consumer. Grant it Service Account User on the runtime identity; do not use it as the runtime identity.
+8. Configure a GitHub Workload Identity Federation provider restricted to `Dwiyasa-Nakula/radio-ai` and `refs/heads/main`.
+9. Add these GitHub Actions secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, and `GCP_RUNTIME_SERVICE_ACCOUNT`.
+10. Set GitHub Actions variable `VERCEL_ALLOWED_ORIGINS` to `https://radio-ai-three.vercel.app`. Add preview origins only when they are deliberately enabled; never use `*`.
 
 `.github/workflows/deploy-backend.yml` tests, builds, pushes a commit-SHA image, and deploys that immutable image. It currently runs only through **Actions > Deploy backend to Cloud Run > Run workflow**. After the WIF bindings and repository values have been verified, a `push` trigger for `main` may be added deliberately. No long-lived Google service-account key is stored in GitHub.
 
@@ -218,7 +219,7 @@ directory handle and scan metadata are stored in IndexedDB.
 
 ## Playback and privacy checks
 
-- High is the default. It chooses the best browser-playable YouTube audio without preferring M4A and ranks radio by codec/bitrate.
+- Balanced is the default for new installations; existing explicit choices remain unchanged. It chooses the best browser-playable YouTube audio without preferring M4A and ranks radio by codec/bitrate.
 - Balanced prefers M4A/AAC compatibility and popularity-based radio ordering.
 - Data Saver targets YouTube and radio streams at or below 96 kbps, with fallbacks when none exist.
 - FLAC, WAV, and every other local file stream from the original `File` or local server range route. Lossy sources are never presented as lossless and are never upsampled.
@@ -418,3 +419,25 @@ Promotion evidence:
   proxy credential occurrences during validation.
 
 Revision `radio-ai-backend-00022-gep` was promoted to **100% production traffic**.
+
+## Browser-only local music
+
+Production web deployments do not read a user laptop or phone through `/api/local/*`. Local playlists must use the browser folder picker or the file-input fallback. Existing playlists created with a server path are shown as `Local / reconnect required`; choose **Reconnect folder** in Settings, then grant access to the folder on that device. The browser keeps scanned `File` objects for playback, but a session-only file selection must be repeated after a refresh.
+
+## YouTube fallback provider
+
+The primary path is Cloud Run yt-dlp with the DataImpulse `YOUTUBE_PROXY_URL` and the local PO-token sidecar. An optional second resolver can be configured with:
+
+```env
+YOUTUBE_FALLBACK_PROVIDER_URL=https://resolver.example.com
+YOUTUBE_FALLBACK_PROVIDER_TOKEN=optional-server-token
+```
+
+This URL points to a separately operated HTTPS service, not DataImpulse and not the Cloud Run backend. After primary extraction and its alternate-client retry fail, the backend sends `POST /v1/resolve` with `{ "videoId": "...", "quality": "balanced" }`. The resolver must return `{ "url": "https://...", "contentType": "audio/mp4", "expiresAt": "2026-08-22T12:00:00Z", "requestHeaders": {} }`. Media URLs must be HTTPS and unexpired. Leave the variables unset if no second resolver is deployed; the backend then uses only the primary path. If you set the token, create a Cloud Run Secret Manager binding named `YOUTUBE_FALLBACK_PROVIDER_TOKEN`; the workflow intentionally does not require that optional secret.
+
+`/readyz` reports `youtubeProvider`, `youtubeProxyConfigured`, and `youtubeFallbackConfigured`. Use those fields plus authenticated `206` range probes to distinguish missing configuration from a YouTube challenge. Never log proxy credentials or fallback tokens.
+
+
+### Updated proxy rollout (2026-08-23)
+
+Revision `radio-ai-backend-00029-kuv` was built from the current workspace and promoted to 100% traffic after canary verification. `/health` returned 200; `/readyz` returned `ready: true`, `youtubeProvider: ready`, and `youtubeProxyConfigured: true`. Unauthenticated YouTube audio returned 401. Authenticated control and representative range probes returned `206 audio/mp4` with 65,536 bytes. Canary logs contained no `YOUTUBE_CHALLENGE` or `youtube_audio_failed` events.

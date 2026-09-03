@@ -950,7 +950,7 @@ const MusicPlayer: React.FC<MusicPlayerProps> = ({
       <section className="music-player text-white p-4 rounded-2xl shadow-lg w-full" aria-label="Audio player">
         <audio ref={deckARef} {...deckEvents('a')} />
         <audio ref={deckBRef} {...deckEvents('b')} />
-        <audio ref={bgmRef} src="/audio/bgm.mp3" loop />
+        <audio ref={bgmRef} src="/audio/bgm.mp3" loop preload="none" />
 
         <div aria-hidden="true" className="music-player__seigaiha" />
         <div aria-hidden="true" className="music-player__asanoha" />

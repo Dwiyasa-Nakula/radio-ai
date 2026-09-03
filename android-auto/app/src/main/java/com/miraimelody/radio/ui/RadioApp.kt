@@ -1,5 +1,6 @@
 package com.miraimelody.radio.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,10 +57,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.miraimelody.radio.R
 import com.miraimelody.radio.data.TrackEntity
 
 private val Ink = Color(0xff08111d)
@@ -103,6 +107,14 @@ fun RadioApp(viewModel: RadioViewModel) {
             containerColor = Ink,
             topBar = {
                 TopAppBar(
+                    navigationIcon = {
+                        Image(
+                            painter = painterResource(R.drawable.mirai_melody_logo),
+                            contentDescription = "mirAI melody logo",
+                            modifier = Modifier.size(42.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                    },
                     title = {
                         Column {
                             Text("mirAI melody", fontWeight = FontWeight.Black)

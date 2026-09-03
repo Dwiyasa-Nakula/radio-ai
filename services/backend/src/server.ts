@@ -40,6 +40,7 @@ import {
   invalidateYouTubeAudio,
   isYouTubeChallengeError,
   resolveYouTubeAudio,
+  resolveYouTubeAudioFallback,
   YouTubeChallengeError,
   YOUTUBE_CHALLENGE_CODE,
   type ResolvedYouTubeAudio,
@@ -54,6 +55,7 @@ import {
   normalizePublicBaseUrl,
 } from './mobileAuth';
 import { YouTubeCircuitBreaker, YouTubeCircuitOpenError } from './youtubeAvailability';
+import { SponsorCreditStore } from './sponsorCredits';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const VIDEO_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
@@ -77,6 +79,7 @@ interface GeneratedHostSegment {
 }
 
 const hostSegmentCache = new TimedPromiseCache<GeneratedHostSegment>();
+const sponsorCreditStore = new SponsorCreditStore();
 
 const youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
 
@@ -346,6 +349,7 @@ async function streamAdFile(
     'Content-Type': contentTypes[extname(filePath).toLowerCase()] ?? 'application/octet-stream',
     'X-Ad-File': encodeURIComponent(fileName),
     'X-Ad-Title': encodeURIComponent(metadata.title),
+    'X-Ad-Sponsor': encodeURIComponent(metadata.sponsor),
     ...(metadata.hasThumbnail ? { 'X-Ad-Thumbnail': encodeURIComponent(fileName) } : {}),
   });
 }
@@ -368,14 +372,21 @@ function copyUpstreamHeaders(response: Response, upstream: { headers: { get(name
   }
 }
 
-async function streamYoutubeAudio(request: Request, response: Response, videoId: string, quality: AudioQuality, forceRefresh = false): Promise<void> {
-  let resolved: Awaited<ReturnType<typeof resolveYouTubeAudio>>;
+async function streamYoutubeAudio(request: Request, response: Response, videoId: string, quality: AudioQuality, forceRefresh = false, fallbackEntry?: ResolvedYouTubeAudio): Promise<void> {
+  let resolved: { entry: ResolvedYouTubeAudio; cacheStatus: string };
   try {
-    resolved = await resolveYouTubeAudio(videoId, quality, forceRefresh);
+    resolved = fallbackEntry
+      ? { entry: fallbackEntry, cacheStatus: 'FALLBACK' as const }
+      : await resolveYouTubeAudio(videoId, quality, forceRefresh);
   } catch (error) {
-    if (!forceRefresh && isYouTubeChallengeError(error)) {
+    if (isYouTubeChallengeError(error) && !forceRefresh) {
       invalidateYouTubeAudio(videoId, quality);
       return streamYoutubeAudio(request, response, videoId, quality, true);
+    }
+    if (isYouTubeChallengeError(error) && !fallbackEntry) {
+      log('WARNING', 'youtube_fallback_attempt', { videoId, quality });
+      const fallback = await resolveYouTubeAudioFallback(videoId, quality, requestSignal(request, response));
+      return streamYoutubeAudio(request, response, videoId, quality, true, fallback);
     }
     throw error;
   }
@@ -390,10 +401,15 @@ async function streamYoutubeAudio(request: Request, response: Response, videoId:
     signal: requestSignal(request, response),
     dispatcher: youtubeProxyAgent,
   });
-  if (!forceRefresh && RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
+  if (RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
     await upstream.body?.cancel().catch(() => undefined);
     invalidateYouTubeAudio(videoId, quality);
-    return streamYoutubeAudio(request, response, videoId, quality, true);
+    if (!forceRefresh) return streamYoutubeAudio(request, response, videoId, quality, true);
+    if (!fallbackEntry) {
+      log('WARNING', 'youtube_fallback_attempt', { videoId, quality });
+      const fallback = await resolveYouTubeAudioFallback(videoId, quality, requestSignal(request, response));
+      return streamYoutubeAudio(request, response, videoId, quality, true, fallback);
+    }
   }
   if (!upstream.ok && upstream.status !== 206) {
     if (RETRYABLE_UPSTREAM_STATUS.has(upstream.status)) {
@@ -419,7 +435,7 @@ app.use(cors({
     if (!origin || configuredOrigins.includes(origin) || (process.env.NODE_ENV !== 'production' && configuredOrigins.length === 0)) callback(null, true);
     else callback(new Error('Origin is not allowed'));
   },
-  exposedHeaders: ['X-Script', 'X-Tts-Provider', 'X-Llm-Model', 'X-Segment-Kind', 'X-Segment-Cache', 'X-Audio-Quality', 'X-Audio-Codec', 'X-Audio-Bitrate', 'X-Audio-Sample-Rate', 'X-Ad-File', 'X-Ad-Title', 'X-Ad-Thumbnail', 'X-Ad-YouTube-Id', 'X-Ad-Thumbnail-Url'],
+  exposedHeaders: ['X-Script', 'X-Tts-Provider', 'X-Llm-Model', 'X-Segment-Kind', 'X-Segment-Cache', 'X-Audio-Quality', 'X-Audio-Codec', 'X-Audio-Bitrate', 'X-Audio-Sample-Rate', 'X-Ad-File', 'X-Ad-Title', 'X-Ad-Thumbnail', 'X-Ad-YouTube-Id', 'X-Ad-Thumbnail-Url', 'X-Ad-Sponsor', 'X-Sponsor-Credit-Key', 'X-Sponsor-Credit-Source'],
   allowedHeaders: ['Authorization', 'Content-Type', 'Range'],
   methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
 }));
@@ -461,7 +477,12 @@ app.get('/readyz', async (_request, response) => {
     (process.env.NODE_ENV !== 'production' || configuredOrigins.length > 0) &&
     youtubeProvider !== 'unavailable'
   );
-  response.status(ready ? 200 : 503).json({ ready, youtubeProvider });
+  response.status(ready ? 200 : 503).json({
+    ready,
+    youtubeProvider,
+    youtubeProxyConfigured: Boolean(youtubeProxyUrl),
+    youtubeFallbackConfigured: Boolean(process.env.YOUTUBE_FALLBACK_PROVIDER_URL?.trim()),
+  });
 });
 
 app.post('/v1/mobile/session', async (request, response) => {
@@ -486,6 +507,28 @@ app.post('/v1/mobile/session', async (request, response) => {
   }
 });
 
+app.get('/v1/host/sponsor-credit', authorize('host:generate'), async (request, response) => {
+  const brand = sanitizeSponsorBrand(typeof request.query.brand === 'string' ? request.query.brand : '');
+  if (!brand) {
+    response.status(400).json({ error: 'A sponsor brand is required' });
+    return;
+  }
+  try {
+    const credit = await sponsorCreditStore.get(brand, requestSignal(request, response));
+    response.set({
+      'Content-Type': credit.contentType,
+      'Content-Length': String(credit.audio.byteLength),
+      'Cache-Control': credit.cacheControl,
+      'X-Sponsor-Credit-Key': credit.key,
+      'X-Sponsor-Credit-Source': credit.source,
+    });
+    response.status(200).send(credit.audio);
+  } catch (error) {
+    if (request.aborted) return;
+    log('ERROR', 'sponsor_credit_failed', { brand, message: error instanceof Error ? error.message : String(error) });
+    response.status(502).json({ error: 'Sponsor credit generation failed' });
+  }
+});
 app.post('/v1/host/segments', authorize('host:generate'), async (request, response) => {
   const body = request.body as HostSegmentRequest;
   if (!body || !['chatter', 'news', 'weather', 'traffic', 'sponsor'].includes(body.kind)) {
@@ -628,9 +671,18 @@ app.all('/v1/youtube/audio/:videoId', authorize('youtube:stream'), async (reques
     return;
   }
   try {
-    youtubeCircuit.assertAvailable();
-    await streamYoutubeAudio(request, response, videoId, qualityFrom(request.query.quality));
-    youtubeCircuit.recordSuccess();
+    const quality = qualityFrom(request.query.quality);
+    const circuit = youtubeCircuit.state();
+    if (!circuit.available && process.env.YOUTUBE_FALLBACK_PROVIDER_URL?.trim()) {
+      log('WARNING', 'youtube_fallback_attempt', { videoId, quality });
+      const fallback = await resolveYouTubeAudioFallback(videoId, quality, requestSignal(request, response));
+      await streamYoutubeAudio(request, response, videoId, quality, true, fallback);
+      youtubeCircuit.recordSuccess();
+    } else {
+      youtubeCircuit.assertAvailable();
+      await streamYoutubeAudio(request, response, videoId, quality);
+      youtubeCircuit.recordSuccess();
+    }
   } catch (error) {
     if (request.aborted) return;
     const challenged = isYouTubeChallengeError(error) || error instanceof YouTubeCircuitOpenError;
@@ -809,6 +861,7 @@ app.get('/v1/host/ads/random', authorize('host:generate'), async (request, respo
           type: 'youtube',
           videoId: source.videoId,
           title: metadata.title,
+          sponsor: metadata.title,
           thumbnailUrl: metadata.thumbnailUrl,
         });
         return;
@@ -816,6 +869,7 @@ app.get('/v1/host/ads/random', authorize('host:generate'), async (request, respo
       response.set({
         'Cache-Control': 'no-store',
         'X-Ad-Title': encodeURIComponent(metadata.title),
+        'X-Ad-Sponsor': encodeURIComponent(metadata.title),
         'X-Ad-YouTube-Id': source.videoId,
         'X-Ad-Thumbnail-Url': encodeURIComponent(metadata.thumbnailUrl),
       });
@@ -831,6 +885,7 @@ app.get('/v1/host/ads/random', authorize('host:generate'), async (request, respo
         type: 'file',
         fileName,
         title: metadata.title,
+        sponsor: metadata.sponsor,
         hasThumbnail: metadata.hasThumbnail,
       });
       return;

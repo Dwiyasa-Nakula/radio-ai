@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import Image from "next/image";
 import InternationalRadio from "./components/InternationalRadio";
 import MusicPlayer from "./components/MusicPlayer";
 import SettingsModal from "./components/SettingsModal";
@@ -31,6 +32,7 @@ import { clearLocalDirectoryFiles, createLocalTrackObjectUrl } from "./lib/brows
 import { backendFetch, backendMediaUrl } from "./lib/backendClient";
 import { deleteDirectoryHandle, deletePlaylistQueue } from "./lib/browserStorage";
 import { applyLocalFavoriteBoost } from "./lib/localQueue";
+import { cachedAudioBlob } from "./lib/audioAssetCache";
 
 const shuffleArray = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -278,7 +280,7 @@ async function fetchItemBlob(
   item: Exclude<RadioItem, { kind: 'song' }>,
   signal: AbortSignal,
   context: SegmentRequestContext
-): Promise<{ blob?: Blob; directUrl?: string; ttsProvider?: string; llmModel?: string; script?: string; adTitle?: string; thumbnailUrl?: string }> {
+): Promise<{ blob?: Blob; directUrl?: string; ttsProvider?: string; llmModel?: string; script?: string; adTitle?: string; sponsorBrand?: string; sponsorSource?: string; thumbnailUrl?: string }> {
   // --- jingle (GET) ---
   if (item.kind === 'jingle') {
     const slot = item.slot ?? 'intro';
@@ -307,9 +309,14 @@ async function fetchItemBlob(
     }
     const encodedTitle = res.headers.get('x-ad-title');
     const encodedThumbnail = res.headers.get('x-ad-thumbnail');
+    const encodedSponsor = res.headers.get('x-ad-sponsor');
     const encodedThumbnailUrl = res.headers.get('x-ad-thumbnail-url');
     const youtubeId = res.headers.get('x-ad-youtube-id');
     let adTitle: string | undefined;
+    let sponsorBrand: string | undefined;
+    if (encodedSponsor) {
+      try { sponsorBrand = decodeURIComponent(encodedSponsor); } catch { sponsorBrand = encodedSponsor; }
+    }
     if (encodedTitle) {
       try {
         adTitle = decodeURIComponent(encodedTitle);
@@ -351,11 +358,22 @@ async function fetchItemBlob(
       blob: directUrl ? undefined : await res.blob(),
       directUrl,
       adTitle,
+      sponsorBrand,
       thumbnailUrl,
     };
   }
 
-  // --- chatter / news / weather / traffic / sponsor credit (POST) ---
+  // Sponsor credits use stable Japanese recordings and a persistent backend cache.
+  if (item.kind === 'sponsor') {
+    const brand = item.brand?.trim();
+    if (!brand) throw new OptionalSegmentUnavailable('The sponsor message has no sponsor title');
+    const response = await cachedAudioBlob(`sponsor:ja:${brand.toLocaleLowerCase('en-US')}`, 365 * 24 * 60 * 60 * 1000, () =>
+      backendFetch(`/v1/host/sponsor-credit?brand=${encodeURIComponent(brand)}`, { signal }, `/api/host/sponsor-credit?brand=${encodeURIComponent(brand)}`)
+    );
+    return { blob: response.blob, sponsorBrand: brand, sponsorSource: response.headers.get('x-sponsor-credit-source') || undefined };
+  }
+
+  // --- chatter / news / weather / traffic (POST) ---
   const isPreroll = item.id.startsWith('preroll-');
   let payload: Record<string, unknown>;
   switch (item.kind) {
@@ -386,28 +404,34 @@ async function fetchItemBlob(
     case 'traffic':
       payload = { kind: 'traffic', isPreroll, language: context.language };
       break;
-    case 'sponsor':
-      payload = { kind: 'sponsor', brand: item.brand, language: context.language };
-      break;
   }
 
-  const res = await backendFetch('/v1/host/segments', {
+  const loadSegment = () => backendFetch('/v1/host/segments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal,
   }, '/api/host/segment');
-  if (res.status === 204) {
-    throw new OptionalSegmentUnavailable(`${item.kind} is not configured`);
+  const cacheTtl = item.kind === 'news' ? 60 * 60 * 1000 : item.kind === 'weather' ? 3 * 60 * 60 * 1000 : 0;
+  let blob: Blob;
+  let headers: Headers;
+  if (cacheTtl) {
+    const cached = await cachedAudioBlob(`segment:${item.kind}:${context.language}:${item.id}`, cacheTtl, loadSegment);
+    blob = cached.blob;
+    headers = cached.headers;
+  } else {
+    const res = await loadSegment();
+    if (res.status === 204) throw new OptionalSegmentUnavailable(`${item.kind} is not configured`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Segment (${item.kind}) fetch failed: ${res.status} ${body.slice(0, 200)}`);
+    }
+    blob = await res.blob();
+    headers = res.headers;
   }
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Segment (${item.kind}) fetch failed: ${res.status} ${body.slice(0, 200)}`);
-  }
-  const blob = await res.blob();
-  const ttsProvider = res.headers.get('x-tts-provider') || undefined;
-  const llmModel = res.headers.get('x-llm-model') || undefined;
-  const encodedScript = res.headers.get('x-script');
+  const ttsProvider = headers.get('x-tts-provider') || undefined;
+  const llmModel = headers.get('x-llm-model') || undefined;
+  const encodedScript = headers.get('x-script');
   let script: string | undefined;
   if (encodedScript) {
     try {
@@ -440,6 +464,8 @@ interface PreparedAudio {
   thumbnailUrl?: string;
   visualUrl?: string;
   adTitle?: string;
+  sponsorBrand?: string;
+  sponsorSource?: string;
 }
 
 /** Human-readable label for non-song items. */
@@ -593,15 +619,6 @@ export default function Home() {
 
   const currentItem = radioQueue[currentIndex];
   const nextItem = radioQueue[currentIndex + 1];
-  const announcerLookahead = useMemo(() => {
-    const items: RadioItem[] = [];
-    for (let index = currentIndex + 2; index < radioQueue.length && items.length < 3; index++) {
-      const candidate = radioQueue[index];
-      if (candidate.kind === 'song') break;
-      if (candidate.kind !== 'jingle') items.push(candidate);
-    }
-    return items;
-  }, [currentIndex, radioQueue]);
   const preparedCurrentAudio =
     currentItem &&
     (currentAudio?.itemId === currentItem.id
@@ -637,7 +654,9 @@ export default function Home() {
     setCurrentIndex((previousIndex) =>
       Math.min(previousIndex + 1, radioQueue.length)
     );
-  }, [currentItem, preparedCurrentAudio?.script, radioQueue.length]);
+  }, [
+    radioQueue,
+    currentItem, preparedCurrentAudio?.script, radioQueue.length]);
 
   useEffect(() => {
     if (radioQueue.length > 0 && currentIndex >= radioQueue.length) {
@@ -651,7 +670,6 @@ export default function Home() {
     const keep = new Set<string>();
     if (currentItem) keep.add(currentItem.id);
     if (nextItem) keep.add(nextItem.id);
-    for (const item of announcerLookahead) keep.add(item.id);
     for (const id of Array.from(keep)) {
       const item = radioQueue.find((candidate) => candidate.id === id);
       if (item && item.kind === 'sponsor' && item.adItemId) {
@@ -729,7 +747,7 @@ export default function Home() {
               throw new OptionalSegmentUnavailable('The sponsor message has no matching ad');
             }
             const preparedAd = await ensure(adItem);
-            title = preparedAd.adTitle;
+            title = preparedAd.sponsorBrand ?? preparedAd.adTitle;
           }
           if (!title) {
             throw new OptionalSegmentUnavailable('The chosen ad has no sponsor title');
@@ -738,7 +756,7 @@ export default function Home() {
           requestItem = { ...item, brand: title };
         }
 
-        const { blob, directUrl, ttsProvider, llmModel, script, adTitle, thumbnailUrl } = await fetchItemBlob(
+        const { blob, directUrl, ttsProvider, llmModel, script, adTitle, sponsorBrand, sponsorSource, thumbnailUrl } = await fetchItemBlob(
           requestItem,
           controller.signal,
           {
@@ -769,6 +787,8 @@ export default function Home() {
           ttsProvider,
           llmModel,
           adTitle: preparedAdTitle,
+          sponsorBrand,
+          sponsorSource,
           script,
         };
       })()
@@ -849,26 +869,13 @@ export default function Home() {
       setNextAudio(null);
     }
 
-    // Generate consecutive announcer items in advance, one at a time, so a
-    // news/traffic/chatter block can share a continuous BGM bed without a
-    // generation pause between segments.
-    announcerLookahead.forEach((item, index) => {
-      const preloadTimeoutId = setTimeout(() => {
-        ensure(item).catch((err) => {
-          if (!isAbortError(err)) {
-            console.warn('Announcer lookahead preload failed for', item.id, err);
-          }
-        });
-      }, 5000 + index * 2500);
-      preloadTimeoutIds.push(preloadTimeoutId);
-    });
 
     return () => {
       cancelled = true;
       for (const timeoutId of preloadTimeoutIds) clearTimeout(timeoutId);
     };
   }, [
-    announcerLookahead,
+    radioQueue,
     currentItem,
     nextItem,
     handleNext,
@@ -897,7 +904,9 @@ export default function Home() {
 
   const handleSkipSegment = useCallback(() => {
     if (currentItem?.kind !== 'song') handleNext();
-  }, [currentItem, handleNext]);
+  }, [
+    radioQueue,
+    currentItem, handleNext]);
 
   const handleActivate = useCallback((id: string) => {
     setActiveId(id);
@@ -1056,7 +1065,14 @@ export default function Home() {
       <div aria-hidden="true" className="radio-backdrop-overlay" />
 
       <header className="radio-glass relative z-10 text-center w-full max-w-2xl flex items-center justify-between rounded-2xl px-4 py-3 sm:px-5 sm:py-4 gap-2">
-        <div className="w-8 sm:w-10" />
+        <Image
+          src="/Logo/Logo_No_backgound.png"
+          alt="mirAI melody logo"
+          width={48}
+          height={48}
+          priority
+          className="absolute left-3 sm:left-4 h-8 w-8 sm:h-10 sm:w-10 object-contain"
+        />
         <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">mirAI melody 73.9 FM</h1>
         <button
           onClick={() => setSettingsOpen(true)}
