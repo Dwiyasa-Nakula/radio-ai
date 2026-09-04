@@ -1064,23 +1064,29 @@ export default function Home() {
       )}
       <div aria-hidden="true" className="radio-backdrop-overlay" />
 
-      <header className="radio-glass relative z-10 text-center w-full max-w-2xl flex items-center justify-between rounded-2xl px-4 py-3 sm:px-5 sm:py-4 gap-2">
-        <Image
-          src="/Logo/Logo_No_backgound.png"
-          alt="mirAI melody logo"
-          width={48}
-          height={48}
-          priority
-          className="absolute left-3 sm:left-4 h-8 w-8 sm:h-10 sm:w-10 object-contain"
-        />
-        <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">mirAI melody 73.9 FM</h1>
-        <button
-          onClick={() => setSettingsOpen(true)}
-          className="w-8 h-8 sm:w-10 sm:h-10 rounded-full hover:bg-gray-700 text-xl sm:text-2xl flex items-center justify-center shrink-0"
-          aria-label="Settings"
-        >
-          ⚙
-        </button>
+      <header className="radio-glass relative z-10 w-full max-w-2xl flex items-center justify-between rounded-2xl px-4 py-3 sm:px-5 sm:py-4 gap-2">
+        <div className="flex items-center justify-start shrink-0 w-8 h-8 sm:w-10 sm:h-10">
+          <Image
+            src="/Logo/Logo_No_backgound.png"
+            alt="mirAI melody logo"
+            width={48}
+            height={48}
+            priority
+            className="h-8 w-8 sm:h-10 sm:w-10 object-contain"
+          />
+        </div>
+        <h1 className="flex-1 text-center text-xl sm:text-4xl font-bold tracking-tight">
+          mirAI melody 73.9 FM
+        </h1>
+        <div className="flex items-center justify-end shrink-0 w-8 h-8 sm:w-10 sm:h-10">
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full hover:bg-gray-700 text-xl sm:text-2xl flex items-center justify-center"
+            aria-label="Settings"
+          >
+            ⚙
+          </button>
+        </div>
       </header>
       <main className="relative z-10 flex flex-col gap-6 w-full max-w-2xl items-center">
         {activePlaylist && (

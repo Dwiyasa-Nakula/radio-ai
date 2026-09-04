@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS pot-build
-ARG POT_PROVIDER_VERSION=1.3.1
-ARG POT_PROVIDER_COMMIT=7608dd51ee813b48cf9a6d68c6e42cb197ce10e0
+ARG POT_PROVIDER_VERSION=1.3.2
+ARG POT_PROVIDER_COMMIT=7511309af023b09788dc8f2efc96cc3671291e6c
 WORKDIR /opt
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates git python3 make g++ \
@@ -46,7 +46,7 @@ WORKDIR /app
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-venv libcairo2 libpango-1.0-0 libjpeg62-turbo libgif7 librsvg2-2 \
   && python3 -m venv /opt/yt-dlp \
-  && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]==2026.7.4" bgutil-ytdlp-pot-provider==1.3.1 \
+  && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]==2026.8.19" bgutil-ytdlp-pot-provider==1.3.2 \
   && /opt/yt-dlp/bin/python -c "import importlib.metadata as m; assert m.version('yt-dlp-ejs'); assert m.version('bgutil-ytdlp-pot-provider')" \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=pot-build /opt/bgutil-provider/server /opt/bgutil-provider/server
